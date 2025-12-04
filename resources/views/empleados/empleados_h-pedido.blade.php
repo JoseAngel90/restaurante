@@ -1013,7 +1013,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let disponibilidad = {};
     comidasOriginal.forEach(c => disponibilidad[c.id] = c.disponible);
 
-    function actualizarMiniTabla(input) {
+    function actualizarMiniTabla(input, numeroPaquete) {
         const cat = input.dataset.categoria;
         const val = input.value.trim().toLowerCase();
         const contenedorMini = input.nextElementSibling;
@@ -1043,8 +1043,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             ${disponibilidad[comida.id]}
                         </span>
                         <input type="number"
-                            name="detalle[${comida.id}][cantidad][]"
+                            name="detalle[${comida.id}][cantidad][${numeroPaquete}]"
                             class="cantidad-input ${esPlatoFuerte ? 'plato-fuerte-input' : ''}"
+                            data-paquete="${numeroPaquete}"
                             min="0"
                             max="${esPlatoFuerte ? 1 : disponibilidad[comida.id]}"
                             value="1"
@@ -1059,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', function() {
         inicializarCantidadInputs();
     }
 
-    function inicializarInputs(card) {
+    function inicializarInputs(card, numeroPaquete) {
         card.querySelectorAll('.abreviatura-input').forEach(input => {
             input.value = '';
             input.nextElementSibling.innerHTML = '';
@@ -1073,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 input.disabled = false;
             }
 
-            input.addEventListener('input', () => actualizarMiniTabla(input));
+            input.addEventListener('input', () => actualizarMiniTabla(input, numeroPaquete));
         });
     }
 
@@ -1086,17 +1087,23 @@ document.addEventListener('DOMContentLoaded', function() {
             input.removeEventListener('input', input._listener);
             const listener = function() {
                 const comidaId = this.dataset.comidaId;
+                const numeroPaquete = this.dataset.paquete;
                 if (!comidaId) return;
 
                 if (parseInt(this.value) < 0) this.value = 0;
 
-                const totalUsado = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"]:not(.plato-fuerte-input)`))
+                // Solo contar en este paquete
+                const totalUsadoEnPaquete = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"][data-paquete="${numeroPaquete}"]:not(.plato-fuerte-input)`))
+                    .reduce((sum, i) => sum + (parseInt(i.value) || 0), 0);
+
+                // Total en otros paquetes
+                const totalEnOtrosPaquetes = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"]:not([data-paquete="${numeroPaquete}"])`))
                     .reduce((sum, i) => sum + (parseInt(i.value) || 0), 0);
 
                 const totalOriginal = comidasOriginal.find(c => c.id == comidaId).disponible;
-                disponibilidad[comidaId] = totalOriginal - totalUsado;
+                disponibilidad[comidaId] = totalOriginal - totalEnOtrosPaquetes - totalUsadoEnPaquete;
 
-                document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"]:not(.plato-fuerte-input)`).forEach(i => {
+                document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"][data-paquete="${numeroPaquete}"]:not(.plato-fuerte-input)`).forEach(i => {
                     i.max = disponibilidad[comidaId] + parseInt(i.value || 0);
                     if (parseInt(i.value) > i.max) i.value = i.max;
                 });
@@ -1131,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', function() {
             actualizarTodasDisponibilidades();
         });
 
-        inicializarInputs(card);
+        inicializarInputs(card, paqueteCount);
         contenedor.appendChild(card);
     }
 
@@ -1145,10 +1152,16 @@ document.addEventListener('DOMContentLoaded', function() {
     function actualizarTodasDisponibilidades() {
         document.querySelectorAll('.cantidad-input:not(.plato-fuerte-input)').forEach(input => {
             const comidaId = input.dataset.comidaId;
-            const totalUsado = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"]:not(.plato-fuerte-input)`))
+            const numeroPaquete = input.dataset.paquete;
+            
+            const totalUsadoEnPaquete = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"][data-paquete="${numeroPaquete}"]:not(.plato-fuerte-input)`))
                 .reduce((sum, i) => sum + (parseInt(i.value) || 0), 0);
+                
+            const totalEnOtrosPaquetes = Array.from(document.querySelectorAll(`.cantidad-input[data-comida-id="${comidaId}"]:not([data-paquete="${numeroPaquete}"])`))
+                .reduce((sum, i) => sum + (parseInt(i.value) || 0), 0);
+                
             const totalOriginal = comidasOriginal.find(c => c.id == comidaId).disponible;
-            disponibilidad[comidaId] = totalOriginal - totalUsado;
+            disponibilidad[comidaId] = totalOriginal - totalEnOtrosPaquetes - totalUsadoEnPaquete;
 
             input.max = disponibilidad[comidaId] + parseInt(input.value || 0);
             if (parseInt(input.value) < 0) input.value = 0;
@@ -1160,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    inicializarInputs(cardTemplate);
+    inicializarInputs(cardTemplate, 0);
 
     const form = document.getElementById('formPedido');
     form.addEventListener('submit', function(e) {

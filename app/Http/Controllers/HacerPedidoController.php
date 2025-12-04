@@ -48,16 +48,13 @@ class HacerPedidoController extends Controller
 
         DB::beginTransaction();
         try {
-            // Crear o actualizar cliente
             $cliente = Cliente::firstOrCreate(
                 ['telefono' => $request->cliente_telefono],
                 ['nombre' => $request->cliente_nombre]
             );
 
-            // Tipo de pedido
             $tipo = TipoPedido::firstOrCreate(['nombre' => $request->estado_pedido]);
 
-            // Crear pedido
             $pedido = Pedido::create([
                 'id_cliente' => $cliente->id,
                 'id_usuario' => auth()->id() ?? 1,
@@ -66,35 +63,170 @@ class HacerPedidoController extends Controller
                 'notas' => $request->notas,
             ]);
 
-            // Guardar detalle por paquetes
-            foreach ($request->detalle as $comidaId => $arraysCantidades) {
-                if (!is_array($arraysCantidades['cantidad'])) continue;
+            $detalleData = $request->input('detalle', []);
+            $totalPedido = 0;
+            $tiposIncluidos = ['SOPA', 'ENSALADAS'];
 
-                foreach ($arraysCantidades['cantidad'] as $cantidad) {
+            // Reorganizar datos: agrupar por paquete
+            $paquetesPorNumero = [];
+
+            foreach ($detalleData as $comidaId => $arrayData) {
+                $comida = Comida::with('tipoComida')->find($comidaId);
+                if (!$comida) continue;
+
+                $cantidadesPorPaquete = $arrayData['cantidad'] ?? [];
+
+                foreach ($cantidadesPorPaquete as $numeroPaquete => $cantidad) {
                     $cantidad = intval($cantidad);
                     if ($cantidad <= 0) continue;
 
-                    $comida = Comida::find($comidaId);
-                    if (!$comida || $cantidad > $comida->disponible) {
-                        DB::rollBack();
-                        return redirect()->back()->with('error', "No hay suficiente stock para {$comida->nombre}.");
+                    if (!isset($paquetesPorNumero[$numeroPaquete])) {
+                        $paquetesPorNumero[$numeroPaquete] = [];
                     }
 
-                    PedidoDetalle::create([
-                        'id_pedido' => $pedido->id,
-                        'id_comida' => $comidaId,
-                        'cantidad' => $cantidad,
-                        'precio_unitario' => $comida->precio,
-                        'subtotal' => $cantidad * $comida->precio,
-                    ]);
+                    $paquetesPorNumero[$numeroPaquete][$comidaId] = [
+                        'comida' => $comida,
+                        'cantidad' => $cantidad
+                    ];
+                }
+            }
 
-                    // Actualizar stock
-                    $comida->decrement('disponible', $cantidad);
+            // Validar que cada paquete tenga al menos un platillo fuerte
+            foreach ($paquetesPorNumero as $numeroPaquete => $comidas) {
+                $tienePlatoFuerte = false;
+
+                foreach ($comidas as $comidaId => $data) {
+                    $tipoComida = strtoupper($data['comida']->tipoComida->descripcion ?? '');
+                    if ($tipoComida === 'PLATO FUERTE') {
+                        $tienePlatoFuerte = true;
+                        break;
+                    }
+                }
+
+                if (!$tienePlatoFuerte) {
+                    DB::rollBack();
+                    return redirect()->back()->with('error', "Paquete {$numeroPaquete}: Debes agregar un platillo fuerte.");
+                }
+            }
+
+            // Procesar cada paquete
+            foreach ($paquetesPorNumero as $numeroPaquete => $comidas) {
+                // Verificar si este paquete tiene el combo perfecto (PF + Sopa + Ensaladas)
+                $tiposEnPaquete = [];
+                $cantidadPlatoFuerte = 0;
+                $tieneSopa = false;
+                $tieneEnsaladas = false;
+
+                foreach ($comidas as $comidaId => $data) {
+                    $tipoComida = strtoupper($data['comida']->tipoComida->descripcion ?? '');
+                    
+                    if ($tipoComida === 'PLATO FUERTE') {
+                        $cantidadPlatoFuerte += $data['cantidad'];
+                    }
+                    if ($tipoComida === 'SOPA') {
+                        $tieneSopa = true;
+                    }
+                    if ($tipoComida === 'ENSALADAS') {
+                        $tieneEnsaladas = true;
+                    }
+                    
+                    if (!in_array($tipoComida, $tiposEnPaquete)) {
+                        $tiposEnPaquete[] = $tipoComida;
+                    }
+                }
+
+                // Verificar si tiene el combo perfecto (PF + Sopa + Ensaladas)
+                // Ahora permite extras además del combo
+                $tieneComboBase = $cantidadPlatoFuerte >= 1 && $tieneSopa && $tieneEnsaladas;
+                $esComboPerFecto = $tieneComboBase;
+
+                // Debug para verificar
+                \Log::info("Paquete {$numeroPaquete}: PF={$cantidadPlatoFuerte}, Sopa={$tieneSopa}, Ensaladas={$tieneEnsaladas}, Tipos=".count($tiposEnPaquete).", ComboPerFecto={$esComboPerFecto}");
+
+                foreach ($comidas as $comidaId => $data) {
+                    $comida = $data['comida'];
+                    $cantidad = $data['cantidad'];
+                    $tipoComida = strtoupper($comida->tipoComida->descripcion ?? '');
+
+                    // Validar stock
+                    if ($comida->disponible < $cantidad) {
+                        DB::rollBack();
+                        return redirect()->back()->with('error', "No hay suficiente stock para {$comida->nombre} en paquete {$numeroPaquete}.");
+                    }
+
+                    \Log::info("Procesando: Paquete={$numeroPaquete}, Comida={$comida->nombre}, Tipo={$tipoComida}, Cantidad={$cantidad}, ComboPerFecto={$esComboPerFecto}");
+
+                    // Procesar según el tipo y si es combo perfecto
+                    if ($tipoComida === 'PLATO FUERTE') {
+                        if ($esComboPerFecto) {
+                            // Combo perfecto: $95 el plato fuerte
+                            $precioUnitario = 95;
+                            $subtotal = $cantidad * $precioUnitario;
+                        } else {
+                            // Sin combo perfecto: precio normal del plato fuerte
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = $cantidad * $precioUnitario;
+                        }
+
+                        PedidoDetalle::create([
+                            'id_pedido' => $pedido->id,
+                            'id_comida' => $comidaId,
+                            'cantidad' => $cantidad,
+                            'precio_unitario' => $precioUnitario,
+                            'subtotal' => $subtotal,
+                            'numero_paquete' => $numeroPaquete,
+                        ]);
+
+                        $comida->decrement('disponible', $cantidad);
+                        $totalPedido += $subtotal;
+
+                    } elseif (in_array($tipoComida, $tiposIncluidos)) {
+                        if ($esComboPerFecto) {
+                            // En combo perfecto: primera unidad gratis, extras con precio
+                            $cantidadConPrecio = max(0, $cantidad - 1);
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = $cantidadConPrecio * $precioUnitario;
+                        } else {
+                            // Sin combo perfecto: todas con precio
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = $cantidad * $precioUnitario;
+                        }
+
+                        PedidoDetalle::create([
+                            'id_pedido' => $pedido->id,
+                            'id_comida' => $comidaId,
+                            'cantidad' => $cantidad,
+                            'precio_unitario' => $precioUnitario,
+                            'subtotal' => $subtotal,
+                            'numero_paquete' => $numeroPaquete,
+                        ]);
+
+                        $comida->decrement('disponible', $cantidad);
+                        $totalPedido += $subtotal;
+
+                    } else {
+                        // Extras (Arroz, Papas, Postre, etc.)
+                        // Siempre con precio completo
+                        $precioUnitario = $comida->precio ?? 0;
+                        $subtotal = $cantidad * $precioUnitario;
+
+                        PedidoDetalle::create([
+                            'id_pedido' => $pedido->id,
+                            'id_comida' => $comidaId,
+                            'cantidad' => $cantidad,
+                            'precio_unitario' => $precioUnitario,
+                            'subtotal' => $subtotal,
+                            'numero_paquete' => $numeroPaquete,
+                        ]);
+
+                        $comida->decrement('disponible', $cantidad);
+                        $totalPedido += $subtotal;
+                    }
                 }
             }
 
             DB::commit();
-            return redirect()->back()->with('success', 'Pedido registrado correctamente.');
+            return redirect()->back()->with('success', "Pedido registrado correctamente. Total: \${$totalPedido}");
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Error al registrar el pedido: ' . $e->getMessage());
