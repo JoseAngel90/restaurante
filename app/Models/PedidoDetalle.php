@@ -18,7 +18,8 @@ class PedidoDetalle extends Model
         'id_comida',
         'cantidad',
         'precio_unitario',
-        'subtotal'
+        'subtotal',
+        'numero_paquete',
     ];
 
     // Relación con Pedido
