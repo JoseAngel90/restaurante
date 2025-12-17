@@ -64,6 +64,12 @@
                 </li>
 
                 <li class="nav-item mb-2">
+                    <a href="{{ url('/empleados_h-pedido') }}" class="nav-link">
+                        <i class="bi bi-pencil-square me-2"></i> Hacer pedido
+                    </a>
+                </li>
+
+                <li class="nav-item mb-2">
                     <a href="{{ url('/admin_pedidos') }}" class="nav-link">
                         <i class="bi bi-card-checklist me-2"></i> Pedidos
                     </a>

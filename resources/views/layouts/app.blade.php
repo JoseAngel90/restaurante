@@ -298,7 +298,7 @@
 
     <!-- Footer -->
     <footer id="footer" class="bg-light text-center text-muted py-3 mt-auto">
-        &copy; {{ date('Y') }} Mi Aplicación
+        &copy; {{ date('Y') }} Raccorp® todos los derechos reservados.  
     </footer>
 
     {{-- BOTÓN FLOTANTE DE RECARGA (Solo para usuarios autenticados) --}}
