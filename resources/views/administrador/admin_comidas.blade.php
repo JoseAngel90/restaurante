@@ -104,13 +104,23 @@
 
                 <!-- Lista de Comidas -->
                 <div class="col-lg-8">
+                    <!-- Buscador de Comidas -->
+                    <div class="mb-4">
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-primary text-white border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="buscadorComidas" class="form-control border-primary" placeholder="Buscar por nombre o abreviatura..." onkeyup="filtrarComidas()">
+                        </div>
+                    </div>
+
                     @php
                         $comidas = App\Models\Comida::with('subtipoComida.tipoComida')->paginate(10);
                     @endphp
 
-                    <div class="row g-3">
+                    <div class="row g-3" id="contenedorComidas">
                         @foreach($comidas as $comida)
-                            <div class="col-md-6">
+                            <div class="col-md-6 comida-item" data-nombre="{{ strtolower($comida->nombre) }}" data-abreviatura="{{ strtolower($comida->abreviatura_op) }}">
                                 <div class="card comida-card h-100 shadow-sm border-0">
                                     <div class="card-body">
                                         <div class="d-flex gap-3">
@@ -257,6 +267,12 @@
                     <div class="mt-4">
                         {{ $comidas->links('pagination::bootstrap-5') }}
                     </div>
+
+                    <!-- Mensaje sin resultados -->
+                    <div id="sinResultados" class="text-center mt-4 d-none">
+                        <i class="bi bi-search fs-1 text-muted"></i>
+                        <p class="text-muted mt-2">No se encontraron comidas que coincidan con tu búsqueda</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -288,9 +304,19 @@
 
                 <!-- Lista de Categorías -->
                 <div class="col-lg-8">
-                    <div class="row g-3">
+                    <!-- Buscador de Categorías -->
+                    <div class="mb-4">
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-primary text-white border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="buscadorCategorias" class="form-control border-primary" placeholder="Buscar categorías..." onkeyup="filtrarCategorias()">
+                        </div>
+                    </div>
+
+                    <div class="row g-3" id="contenedorCategorias">
                         @foreach(App\Models\TipoComida::with('subtipos')->get() as $tipo)
-                            <div class="col-md-6">
+                            <div class="col-md-6 categoria-item" data-nombre="{{ strtolower($tipo->descripcion) }}">
                                 <div class="card categoria-card shadow-sm border-0 h-100">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -394,6 +420,12 @@
                             </form>
                         @endforeach
                     </div>
+
+                    <!-- Mensaje sin resultados -->
+                    <div id="sinResultadosCategorias" class="text-center mt-4 d-none">
+                        <i class="bi bi-search fs-1 text-muted"></i>
+                        <p class="text-muted mt-2">No se encontraron categorías que coincidan con tu búsqueda</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -434,34 +466,52 @@
 
                 <!-- Lista de Subcategorías Agrupadas -->
                 <div class="col-lg-8">
-                    @foreach(App\Models\TipoComida::with('subtipos')->get() as $tipo)
-                        @if($tipo->subtipos->count() > 0)
-                            <div class="mb-4">
-                                <h5 class="text-primary mb-3">
-                                    <i class="bi bi-tag-fill me-2"></i>{{ $tipo->descripcion }}
-                                </h5>
-                                <div class="row g-3">
-                                    @foreach($tipo->subtipos as $sub)
-                                        <div class="col-md-6">
-                                            <div class="card subcategoria-card shadow-sm border-0">
-                                                <div class="card-body">
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <div>
-                                                            <h6 class="mb-0 fw-bold">{{ $sub->descripcion }}</h6>
-                                                            <small class="text-muted">{{ $tipo->descripcion }}</small>
+                    <!-- Buscador de Subcategorías -->
+                    <div class="mb-4">
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-primary text-white border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="buscadorSubcategorias" class="form-control border-primary" placeholder="Buscar subcategorías..." onkeyup="filtrarSubcategorias()">
+                        </div>
+                    </div>
+
+                    <div id="contenedorSubcategorias">
+                        @foreach(App\Models\TipoComida::with('subtipos')->get() as $tipo)
+                            @if($tipo->subtipos->count() > 0)
+                                <div class="mb-4 tipo-comida-group" data-nombre="{{ strtolower($tipo->descripcion) }}">
+                                    <h5 class="text-primary mb-3">
+                                        <i class="bi bi-tag-fill me-2"></i>{{ $tipo->descripcion }}
+                                    </h5>
+                                    <div class="row g-3">
+                                        @foreach($tipo->subtipos as $sub)
+                                            <div class="col-md-6 subcategoria-item" data-nombre="{{ strtolower($sub->descripcion) }}">
+                                                <div class="card subcategoria-card shadow-sm border-0">
+                                                    <div class="card-body">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <h6 class="mb-0 fw-bold">{{ $sub->descripcion }}</h6>
+                                                                <small class="text-muted">{{ $tipo->descripcion }}</small>
+                                                            </div>
+                                                            <button class="btn btn-sm btn-outline-danger" onclick="eliminarSubtipo({{ $sub->id }})">
+                                                                <i class="bi bi-trash-fill"></i>
+                                                            </button>
                                                         </div>
-                                                        <button class="btn btn-sm btn-outline-danger" onclick="eliminarSubtipo({{ $sub->id }})">
-                                                            <i class="bi bi-trash-fill"></i>
-                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    @endforeach
+                                        @endforeach
+                                    </div>
                                 </div>
-                            </div>
-                        @endif
-                    @endforeach
+                            @endif
+                        @endforeach
+                    </div>
+
+                    <!-- Mensaje sin resultados -->
+                    <div id="sinResultadosSubcategorias" class="text-center mt-4 d-none">
+                        <i class="bi bi-search fs-1 text-muted"></i>
+                        <p class="text-muted mt-2">No se encontraron subcategorías que coincidan con tu búsqueda</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -631,6 +681,72 @@
 
 @push('scripts')
 <script>
+function filtrarComidas() {
+    const busca = document.getElementById('buscadorComidas').value.toLowerCase();
+    const items = document.querySelectorAll('.comida-item');
+    let visibles = 0;
+
+    items.forEach(item => {
+        const nombre = item.dataset.nombre;
+        const abreviatura = item.dataset.abreviatura;
+
+        if (nombre.includes(busca) || abreviatura.includes(busca)) {
+            item.style.display = '';
+            visibles++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+
+    document.getElementById('sinResultados').classList.toggle('d-none', visibles > 0);
+}
+
+function filtrarCategorias() {
+    const busca = document.getElementById('buscadorCategorias').value.toLowerCase();
+    const items = document.querySelectorAll('.categoria-item');
+    let visibles = 0;
+
+    items.forEach(item => {
+        const nombre = item.dataset.nombre;
+
+        if (nombre.includes(busca)) {
+            item.style.display = '';
+            visibles++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+
+    document.getElementById('sinResultadosCategorias').classList.toggle('d-none', visibles > 0);
+}
+
+function filtrarSubcategorias() {
+    const busca = document.getElementById('buscadorSubcategorias').value.toLowerCase();
+    const grupos = document.querySelectorAll('.tipo-comida-group');
+    let visibles = 0;
+
+    grupos.forEach(grupo => {
+        const items = grupo.querySelectorAll('.subcategoria-item');
+        let grupoVisible = false;
+
+        items.forEach(item => {
+            const nombre = item.dataset.nombre;
+
+            if (nombre.includes(busca)) {
+                item.style.display = '';
+                grupoVisible = true;
+                visibles++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        grupo.style.display = grupoVisible ? '' : 'none';
+    });
+
+    document.getElementById('sinResultadosSubcategorias').classList.toggle('d-none', visibles > 0);
+}
+
 function eliminarTipo(id) {
     if(confirm('¿Eliminar esta categoría? Se eliminarán todas sus subcategorías y comidas asociadas.')) {
         document.getElementById('eliminar-tipo-' + id).submit();

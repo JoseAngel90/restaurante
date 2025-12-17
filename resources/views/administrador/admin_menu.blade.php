@@ -184,6 +184,14 @@
     .sticky-sidebar {
         position: sticky;
         top: 20px;
+        max-height: calc(100vh - 40px);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .sticky-sidebar .card-body {
+        flex: 1;
+        overflow-y: auto;
     }
 
     .bg-gradient-primary {
@@ -207,6 +215,7 @@
         cursor: pointer;
         border-radius: 4px;
         transition: background 0.2s;
+        font-size: 0.875rem;
     }
 
     .categoria-header:hover {
@@ -215,6 +224,7 @@
 
     .categoria-toggle {
         transition: transform 0.3s;
+        flex-shrink: 0;
     }
 
     .categoria-seccion.abierta .categoria-toggle {
@@ -224,11 +234,11 @@
     .categoria-contenido {
         max-height: 0;
         overflow: hidden;
-        transition: max-height 0.3s ease;
+        transition: max-height 0.3s ease-out;
     }
 
     .categoria-seccion.abierta .categoria-contenido {
-        max-height: 500px;
+        max-height: none;
         padding-top: 8px;
     }
 
@@ -244,6 +254,7 @@
         margin: 4px 0;
         cursor: move;
         transition: all 0.2s;
+        font-size: 0.8rem;
     }
 
     .comida-chip:hover {
@@ -261,15 +272,19 @@
         display: flex;
         flex-direction: column;
         flex: 1;
+        min-width: 0;
     }
 
     .comida-nombre {
-        font-size: 0.875rem;
+        font-size: 0.75rem;
         font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .comida-stock {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         color: #6b7280;
     }
 
@@ -287,6 +302,9 @@
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         overflow: hidden;
         transition: all 0.3s;
+        max-height: calc(100vh - 200px);
+        display: flex;
+        flex-direction: column;
     }
 
     .dia-card:hover {
@@ -306,6 +324,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-shrink: 0;
     }
 
     .dia-hoy .dia-header {
@@ -325,6 +344,8 @@
 
     .dia-contenido {
         padding: 12px;
+        overflow-y: auto;
+        flex: 1;
     }
 
     /* Slots de categorías */
@@ -342,6 +363,7 @@
         padding: 4px 8px;
         background: white;
         border-radius: 4px;
+        font-size: 0.75rem;
     }
 
     /* Drop zone */
@@ -382,6 +404,7 @@
         padding: 8px;
         margin-bottom: 6px;
         animation: slideIn 0.3s ease;
+        font-size: 0.8rem;
     }
 
     @keyframes slideIn {
@@ -396,9 +419,12 @@
     }
 
     .comida-nombre-small {
-        font-size: 0.875rem;
+        font-size: 0.8rem;
         font-weight: 600;
         color: #1f2937;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .btn-remove-small {
@@ -464,6 +490,11 @@
         .sticky-sidebar {
             position: relative;
             margin-bottom: 20px;
+            max-height: none;
+        }
+
+        .sticky-sidebar .card-body {
+            max-height: 400px;
         }
     }
 
@@ -473,8 +504,16 @@
         }
         
         .comida-chip {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             padding: 4px 8px;
+        }
+
+        .categoria-header {
+            font-size: 0.8rem;
+        }
+
+        .dia-card {
+            max-height: calc(100vh - 150px);
         }
     }
 </style>
