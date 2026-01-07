@@ -93,4 +93,28 @@ class ComidaController extends Controller
         $comida->delete();
         return redirect()->back()->with('success', 'Comida eliminada correctamente.');
     }
+
+    public function buscar(Request $request) {
+        $q = $request->query('q', '');
+        
+        $comidas = Comida::with('subtipoComida.tipoComida')
+            ->where('nombre', 'like', "%{$q}%")
+            ->orWhere('abreviatura_op', 'like', "%{$q}%")
+            ->get();
+
+        $resultado = $comidas->map(function($comida) {
+            return [
+                'id' => $comida->id,
+                'nombre' => $comida->nombre,
+                'abreviatura_op' => $comida->abreviatura_op,
+                'precio' => $comida->precio,
+                'disponible' => $comida->disponible,
+                'imagen' => $comida->imagen,
+                'tipo_comida' => $comida->subtipoComida?->tipoComida?->descripcion ?? 'Sin categoría',
+                'subtipo_comida' => $comida->subtipoComida?->descripcion ?? 'Sin subcategoría',
+            ];
+        });
+
+        return response()->json(['comidas' => $resultado]);
+    }
 }

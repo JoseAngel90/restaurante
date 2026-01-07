@@ -27,16 +27,22 @@
         $diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
         $tiposComida = \App\Models\TipoComida::with('comidas')->orderBy('id')->get();
         
-        // Obtener todas las comidas seleccionadas de la semana
+        // Obtener todas las comidas seleccionadas de 3 semanas
         $lunesDate = Carbon::now()->startOfWeek();
-        $menuSemana = [];
+        $menuSemanas = [];
         
-        foreach($diasSemana as $index => $dia) {
-            $fecha = $lunesDate->copy()->addDays($index)->format('Y-m-d');
-            $menuSemana[$fecha] = \App\Models\DisponibilidadComidaDia::where('fecha', $fecha)
-                ->with('comida.tipoComida')
-                ->get()
-                ->groupBy('comida.tipoComida.descripcion');
+        // Generar menú para 3 semanas
+        for ($semana = 0; $semana < 3; $semana++) {
+            $menuSemanas[$semana] = [];
+            $lunesSemana = $lunesDate->copy()->addWeeks($semana);
+            
+            foreach($diasSemana as $index => $dia) {
+                $fecha = $lunesSemana->copy()->addDays($index)->format('Y-m-d');
+                $menuSemanas[$semana][$fecha] = \App\Models\DisponibilidadComidaDia::where('fecha', $fecha)
+                    ->with('comida.tipoComida')
+                    ->get()
+                    ->groupBy('comida.tipoComida.descripcion');
+            }
         }
     @endphp
 
@@ -50,9 +56,20 @@
                         Banco de Comidas
                     </h5>
                 </div>
-                <div class="card-body p-2" style="max-height: calc(100vh - 250px); overflow-y: auto;">
+                <div class="card-body p-3">
+                    <!-- Buscador de Comidas -->
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-primary text-white border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="buscadorBancoComidas" class="form-control" placeholder="Buscar comidas..." onkeyup="filtrarBancoComidas()">
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-2" style="max-height: calc(100vh - 300px); overflow-y: auto;" id="contenedorBancoComidas">
                     @foreach($tiposComida as $tipo)
-                        <div class="categoria-seccion mb-3">
+                        <div class="categoria-seccion mb-3 tipo-comida-banco" data-tipo-nombre="{{ strtolower($tipo->descripcion) }}">
                             <div class="categoria-header">
                                 <i class="bi bi-chevron-right categoria-toggle"></i>
                                 <span class="fw-bold">{{ $tipo->descripcion }}</span>
@@ -60,12 +77,13 @@
                             </div>
                             <div class="categoria-contenido">
                                 @foreach($tipo->comidas as $comida)
-                                    <div class="comida-chip draggable" 
+                                    <div class="comida-chip draggable comida-banco-item" 
                                          draggable="true"
                                          data-comida-id="{{ $comida->id }}"
-                                         data-comida-nombre="{{ $comida->nombre }}"
+                                         data-comida-nombre="{{ strtolower($comida->nombre) }}"
                                          data-tipo="{{ $tipo->descripcion }}"
                                          data-disponible="{{ $comida->disponible }}">
+                                        <input type="checkbox" class="checkbox-comida" style="cursor: pointer; margin-right: 4px;">
                                         <i class="bi bi-grip-vertical me-1"></i>
                                         <div class="comida-info">
                                             <span class="comida-nombre">{{ $comida->nombre }}</span>
@@ -82,72 +100,94 @@
 
         <!-- Panel Principal: Calendario Semanal -->
         <div class="col-lg-9">
-            <div class="semana-container">
-                @foreach($diasSemana as $index => $dia)
-                    @php
-                        $fecha = $lunesDate->copy()->addDays($index)->format('Y-m-d');
-                        $fechaFormateada = Carbon::parse($fecha)->format('d/m');
-                        $esHoy = Carbon::parse($fecha)->isToday();
-                    @endphp
-                    
-                    <div class="dia-card {{ $esHoy ? 'dia-hoy' : '' }}">
-                        <div class="dia-header">
-                            <div class="dia-info">
-                                <h4 class="dia-nombre">{{ $dia }}</h4>
-                                <span class="dia-fecha">{{ $fechaFormateada }}</span>
-                            </div>
-                            @if($esHoy)
-                                <span class="badge bg-warning text-dark">
-                                    <i class="bi bi-star-fill me-1"></i>Hoy
-                                </span>
+            @for($semana = 0; $semana < 3; $semana++)
+                @php
+                    $lunesSemana = $lunesDate->copy()->addWeeks($semana);
+                    $fechaInicio = $lunesSemana->format('d/m/Y');
+                    $fechaFin = $lunesSemana->copy()->addDays(4)->format('d/m/Y');
+                    $esSemanActual = $semana === 0;
+                @endphp
+                
+                <div class="mb-5">
+                    <div class="semana-titulo">
+                        <h3 class="mb-0">
+                            <i class="bi bi-calendar-week me-2"></i>
+                            Semana
+                            <small class="text-muted">({{ $fechaInicio }} - {{ $fechaFin }})</small>
+                            @if($esSemanActual)
+                                <span class="badge bg-warning text-dark ms-2">Semana Actual</span>
                             @endif
-                        </div>
-                        
-                        <div class="dia-contenido">
-                            @foreach($tiposComida as $tipo)
-                                @php
-                                    $comidasTipo = $menuSemana[$fecha][$tipo->descripcion] ?? collect();
-                                @endphp
-                                
-                                <div class="categoria-slot">
-                                    <div class="slot-label">
-                                        <i class="bi bi-egg-fried text-success me-1"></i>
-                                        <small class="fw-semibold">{{ $tipo->descripcion }}</small>
-                                    </div>
-                                    
-                                    <div class="drop-zone" 
-                                         data-fecha="{{ $fecha }}"
-                                         data-tipo="{{ $tipo->descripcion }}">
-                                        @if($comidasTipo->isEmpty())
-                                            <div class="zona-vacia">
-                                                <i class="bi bi-plus-circle"></i>
-                                                <small>Arrastra aquí</small>
-                                            </div>
-                                        @endif
-                                        
-                                        @foreach($comidasTipo as $item)
-                                            <div class="comida-seleccionada"
-                                                 data-comida-id="{{ $item->comida->id }}"
-                                                 data-fecha="{{ $fecha }}">
-                                                <button type="button" class="btn-remove-small" title="Quitar">
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i class="bi bi-check-circle-fill text-success"></i>
-                                                    <div>
-                                                        <div class="comida-nombre-small">{{ $item->comida->nombre }}</div>
-                                                        <small class="text-muted">Stock: {{ $item->comida->disponible }}</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
+                        </h3>
                     </div>
-                @endforeach
-            </div>
+                    
+                    <div class="semana-container">
+                        @foreach($diasSemana as $index => $dia)
+                            @php
+                                $fecha = $lunesSemana->copy()->addDays($index)->format('Y-m-d');
+                                $fechaFormateada = Carbon::parse($fecha)->format('d/m');
+                                $esHoy = Carbon::parse($fecha)->isToday();
+                            @endphp
+                            
+                            <div class="dia-card {{ $esHoy ? 'dia-hoy' : '' }}">
+                                <div class="dia-header">
+                                    <div class="dia-info">
+                                        <h4 class="dia-nombre">{{ $dia }}</h4>
+                                        <span class="dia-fecha">{{ $fechaFormateada }}</span>
+                                    </div>
+                                    @if($esHoy)
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-star-fill me-1"></i>Hoy
+                                        </span>
+                                    @endif
+                                </div>
+                                
+                                <div class="dia-contenido">
+                                    @foreach($tiposComida as $tipo)
+                                        @php
+                                            $comidasTipo = $menuSemanas[$semana][$fecha][$tipo->descripcion] ?? collect();
+                                        @endphp
+                                        
+                                        <div class="categoria-slot">
+                                            <div class="slot-label">
+                                                <i class="bi bi-egg-fried text-success me-1"></i>
+                                                <small class="fw-semibold">{{ $tipo->descripcion }}</small>
+                                            </div>
+                                            
+                                            <div class="drop-zone" 
+                                                 data-fecha="{{ $fecha }}"
+                                                 data-tipo="{{ $tipo->descripcion }}">
+                                                @if($comidasTipo->isEmpty())
+                                                    <div class="zona-vacia">
+                                                        <i class="bi bi-plus-circle"></i>
+                                                        <small>Arrastra aquí</small>
+                                                    </div>
+                                                @endif
+                                                
+                                                @foreach($comidasTipo as $item)
+                                                    <div class="comida-seleccionada"
+                                                         data-comida-id="{{ $item->comida->id }}"
+                                                         data-fecha="{{ $fecha }}">
+                                                        <button type="button" class="btn-remove-small" title="Quitar">
+                                                            <i class="bi bi-x-lg"></i>
+                                                        </button>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <i class="bi bi-check-circle-fill text-success"></i>
+                                                            <div>
+                                                                <div class="comida-nombre-small">{{ $item->comida->nombre }}</div>
+                                                                <small class="text-muted">Stock: {{ $item->comida->disponible }}</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endfor
         </div>
     </div>
 
@@ -268,6 +308,17 @@
         transform: rotate(3deg) scale(0.95);
     }
 
+    .comida-chip.seleccionada {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border-color: #059669;
+    }
+
+    .comida-chip.seleccionada .comida-nombre,
+    .comida-chip.seleccionada .comida-stock {
+        color: white;
+    }
+
     .comida-info {
         display: flex;
         flex-direction: column;
@@ -291,8 +342,20 @@
     /* Contenedor de la semana */
     .semana-container {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(5, 1fr);
         gap: 16px;
+        overflow-x: auto;
+    }
+
+    .semana-titulo {
+        padding: 20px 0 16px 0;
+        border-bottom: 3px solid #10b981;
+        margin-bottom: 16px;
+    }
+
+    .semana-titulo h3 {
+        color: #1f2937;
+        font-size: 1.5rem;
     }
 
     /* Tarjeta de día */
@@ -305,6 +368,7 @@
         max-height: calc(100vh - 200px);
         display: flex;
         flex-direction: column;
+        min-width: 240px;
     }
 
     .dia-card:hover {
@@ -484,7 +548,8 @@
     /* Responsive */
     @media (max-width: 992px) {
         .semana-container {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(5, 1fr);
+            min-width: min-content;
         }
         
         .sticky-sidebar {
@@ -519,6 +584,36 @@
 </style>
 
 <script>
+// Función de filtrado - Accesible globalmente para onkeyup
+function filtrarBancoComidas() {
+    const input = document.getElementById('buscadorBancoComidas');
+    if (!input) {
+        console.error('Buscador no encontrado');
+        return;
+    }
+    
+    const busca = input.value.toLowerCase().trim();
+    const grupos = document.querySelectorAll('.tipo-comida-banco');
+
+    grupos.forEach(grupo => {
+        const itemsGrupo = grupo.querySelectorAll('.comida-banco-item');
+        let grupoVisible = false;
+
+        itemsGrupo.forEach(item => {
+            const nombre = item.dataset.comidaNombre || '';
+
+            if (busca === '' || nombre.includes(busca)) {
+                item.style.display = '';
+                grupoVisible = true;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        grupo.style.display = grupoVisible ? '' : 'none';
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const draggables = document.querySelectorAll('.draggable');
     const dropZones = document.querySelectorAll('.drop-zone');
@@ -539,19 +634,54 @@ document.addEventListener('DOMContentLoaded', function() {
         sec.classList.add('abierta');
     });
 
+    // Selección múltiple de comidas
+    document.querySelectorAll('.checkbox-comida').forEach(checkbox => {
+        checkbox.addEventListener('change', function(e) {
+            e.stopPropagation();
+            const comidaChip = this.closest('.comida-chip');
+            if (this.checked) {
+                comidaChip.classList.add('seleccionada');
+            } else {
+                comidaChip.classList.remove('seleccionada');
+            }
+        });
+    });
+
     // Drag and Drop para comidas disponibles
     draggables.forEach(draggable => {
         draggable.addEventListener('dragstart', function(e) {
-            this.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('comida-id', this.dataset.comidaId);
-            e.dataTransfer.setData('comida-nombre', this.dataset.comidaNombre);
-            e.dataTransfer.setData('tipo', this.dataset.tipo);
-            e.dataTransfer.setData('disponible', this.dataset.disponible);
+            // Obtener todas las comidas seleccionadas
+            const comidasSeleccionadas = document.querySelectorAll('.comida-chip.seleccionada');
+            
+            if (comidasSeleccionadas.length === 0) {
+                // Si no hay ninguna seleccionada, arrastrar solo esta
+                this.classList.add('dragging');
+                const comidasData = [{
+                    id: this.dataset.comidaId,
+                    nombre: this.dataset.comidaNombre,
+                    tipo: this.dataset.tipo,
+                    disponible: this.dataset.disponible
+                }];
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('comidas-json', JSON.stringify(comidasData));
+            } else {
+                // Si hay seleccionadas, arrastrar todas
+                comidasSeleccionadas.forEach(chip => chip.classList.add('dragging'));
+                const comidasData = Array.from(comidasSeleccionadas).map(chip => ({
+                    id: chip.dataset.comidaId,
+                    nombre: chip.dataset.comidaNombre,
+                    tipo: chip.dataset.tipo,
+                    disponible: chip.dataset.disponible
+                }));
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('comidas-json', JSON.stringify(comidasData));
+            }
         });
 
         draggable.addEventListener('dragend', function() {
-            this.classList.remove('dragging');
+            document.querySelectorAll('.comida-chip.dragging').forEach(chip => {
+                chip.classList.remove('dragging');
+            });
         });
     });
 
@@ -571,67 +701,85 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             this.classList.remove('drag-over');
 
-            const comidaId = e.dataTransfer.getData('comida-id');
-            const comidaNombre = e.dataTransfer.getData('comida-nombre');
-            const tipo = e.dataTransfer.getData('tipo');
-            const disponible = e.dataTransfer.getData('disponible');
+            const comidasJson = e.dataTransfer.getData('comidas-json');
+            const comidas = JSON.parse(comidasJson);
             
             const fecha = this.dataset.fecha;
             const tipoCelda = this.dataset.tipo;
 
-            // Verificar que sea del mismo tipo
-            if (tipo !== tipoCelda) {
-                mostrarNotificacion(`Esta comida es de tipo "${tipo}" y no puede ir en "${tipoCelda}"`, 'danger');
-                return;
-            }
+            let comidasAgregadas = 0;
+            let comidasRechazadas = 0;
 
-            // Verificar si ya existe
-            const yaExiste = this.querySelector(`[data-comida-id="${comidaId}"]`);
-            if (yaExiste) {
-                mostrarNotificacion('Esta comida ya está seleccionada para este día', 'warning');
-                return;
-            }
-
-            // Ocultar zona vacía
-            const zonaVacia = this.querySelector('.zona-vacia');
-            if (zonaVacia) zonaVacia.style.display = 'none';
-
-            // Agregar la comida
-            const comidaDiv = document.createElement('div');
-            comidaDiv.className = 'comida-seleccionada';
-            comidaDiv.dataset.comidaId = comidaId;
-            comidaDiv.dataset.fecha = fecha;
-            comidaDiv.innerHTML = `
-                <button type="button" class="btn-remove-small" title="Quitar">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-check-circle-fill text-success"></i>
-                    <div>
-                        <div class="comida-nombre-small">${comidaNombre}</div>
-                        <small class="text-muted">Stock: ${disponible}</small>
-                    </div>
-                </div>
-            `;
-
-            // Agregar evento para quitar
-            comidaDiv.querySelector('.btn-remove-small').addEventListener('click', function() {
-                registrarCambio(fecha, comidaId, 'quitar');
-                comidaDiv.remove();
-                
-                // Mostrar zona vacía si no hay comidas
-                if (zone.querySelectorAll('.comida-seleccionada').length === 0) {
-                    if (zonaVacia) zonaVacia.style.display = 'flex';
+            comidas.forEach(comida => {
+                // Verificar que sea del mismo tipo
+                if (comida.tipo !== tipoCelda) {
+                    comidasRechazadas++;
+                    return;
                 }
+
+                // Verificar si ya existe
+                const yaExiste = this.querySelector(`[data-comida-id="${comida.id}"]`);
+                if (yaExiste) {
+                    comidasRechazadas++;
+                    return;
+                }
+
+                // Ocultar zona vacía
+                const zonaVacia = this.querySelector('.zona-vacia');
+                if (zonaVacia) zonaVacia.style.display = 'none';
+
+                // Agregar la comida
+                const comidaDiv = document.createElement('div');
+                comidaDiv.className = 'comida-seleccionada';
+                comidaDiv.dataset.comidaId = comida.id;
+                comidaDiv.dataset.fecha = fecha;
+                comidaDiv.innerHTML = `
+                    <button type="button" class="btn-remove-small" title="Quitar">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <div>
+                            <div class="comida-nombre-small">${comida.nombre}</div>
+                            <small class="text-muted">Stock: ${comida.disponible}</small>
+                        </div>
+                    </div>
+                `;
+
+                // Agregar evento para quitar
+                comidaDiv.querySelector('.btn-remove-small').addEventListener('click', function() {
+                    registrarCambio(fecha, comida.id, 'quitar');
+                    comidaDiv.remove();
+                    
+                    // Mostrar zona vacía si no hay comidas
+                    if (zone.querySelectorAll('.comida-seleccionada').length === 0) {
+                        const zonaVacia = zone.querySelector('.zona-vacia');
+                        if (zonaVacia) zonaVacia.style.display = 'flex';
+                    }
+                    
+                    mostrarNotificacion('Comida eliminada', 'success');
+                });
+
+                this.appendChild(comidaDiv);
                 
-                mostrarNotificacion('Comida eliminada', 'success');
+                // Registrar cambio
+                registrarCambio(fecha, comida.id, 'agregar');
+                comidasAgregadas++;
             });
 
-            this.appendChild(comidaDiv);
-            
-            // Registrar cambio
-            registrarCambio(fecha, comidaId, 'agregar');
-            mostrarNotificacion('Comida agregada correctamente', 'success');
+            // Desseleccionar después de arrastrar
+            document.querySelectorAll('.checkbox-comida:checked').forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.closest('.comida-chip').classList.remove('seleccionada');
+            });
+
+            // Mostrar notificación
+            if (comidasAgregadas > 0) {
+                mostrarNotificacion(`${comidasAgregadas} comida(s) agregada(s) correctamente`, 'success');
+            }
+            if (comidasRechazadas > 0) {
+                mostrarNotificacion(`${comidasRechazadas} comida(s) no pudo(eron) agregarse (tipo incorrecto o duplicado)`, 'warning');
+            }
         });
     });
 

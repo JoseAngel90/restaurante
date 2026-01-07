@@ -126,6 +126,13 @@
         </div>
     </div>
 
+    <!-- Botón Venta Rápida -->
+    <div class="mb-4">
+        <button type="button" class="btn btn-success btn-lg shadow" data-bs-toggle="modal" data-bs-target="#ventaRapidaModal">
+            <i class="bi bi-plus-circle me-2"></i>Nueva Venta Rápida
+        </button>
+    </div>
+
     {{-- ================= TABLA DE TICKETS PENDIENTES ================= --}}
     @if($tickets->count() > 0)
         <div class="card shadow-sm">
@@ -1308,4 +1315,412 @@ document.querySelectorAll('.btn-imprimir-ticket').forEach(btn => {
 });
 
 </script>
+
+<!-- Modal Venta Rápida - Con funcionalidad como empleado -->
+<div class="modal fade" id="ventaRapidaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <form action="{{ url('/venta-directa') }}" method="POST" id="formVentaRapida">
+                @csrf
+                
+                <div class="modal-header bg-success text-white border-0">
+                    <h5 class="modal-title d-flex align-items-center">
+                        <i class="bi bi-lightning-fill me-2"></i>Nueva Venta Rápida
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body p-4">
+                    <!-- Información del cliente -->
+                    <div class="mb-4">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Nombre del Cliente</label>
+                                <input type="text" name="cliente_nombre" class="form-control" placeholder="Ej: Juan Pérez" required>
+                                <small class="text-muted">O escribe "walking"</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Teléfono</label>
+                                <input type="text" name="cliente_telefono" class="form-control" placeholder="Ej: +34 666 123 456" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buscador de comidas -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Buscar Comida</label>
+                        <div class="input-group">
+                            <input type="text" 
+                                   id="buscarComidaVentaAdmin" 
+                                   class="form-control" 
+                                   placeholder="Busca por abreviatura o nombre..."
+                                   autocomplete="off">
+                            <input type="number" 
+                                   id="cantidadBusquedaAdmin" 
+                                   class="form-control" 
+                                   value="1" 
+                                   min="1" 
+                                   max="99" 
+                                   style="max-width: 80px;">
+                            <button type="button" id="btnAgregarComidaAdmin" class="btn btn-primary">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
+                        <div id="resultadosComidaVentaAdmin" class="list-group mt-2"></div>
+                    </div>
+
+                    <!-- Grid de categorías -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Selecciona Comidas</label>
+                        <div class="comidas-grid-admin" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; max-height: 350px; overflow-y: auto; padding: 0.5rem;">
+                            @forelse($comidasDisponiblesHoy as $comida)
+                                <div class="comida-card-admin">
+                                    <div class="form-check mb-2">
+                                        <input type="checkbox" 
+                                               class="form-check-input comida-check-admin" 
+                                               id="comida-{{ $comida['id'] }}"
+                                               data-id="{{ $comida['id'] }}"
+                                               data-nombre="{{ $comida['nombre'] }}"
+                                               data-abrev="{{ $comida['abreviatura_op'] }}"
+                                               data-precio="{{ $comida['precio'] }}"
+                                               data-disponible="{{ $comida['disponible'] }}">
+                                        <label class="form-check-label" for="comida-{{ $comida['id'] }}">
+                                            <strong class="d-block">{{ $comida['nombre'] }}</strong>
+                                            <small class="text-muted">{{ $comida['abreviatura_op'] }}</small>
+                                        </label>
+                                    </div>
+                                    <input type="number" 
+                                           name="comidas[{{ $comida['id'] }}]"
+                                           class="form-control form-control-sm cantidad-venta-admin"
+                                           value="0"
+                                           min="0"
+                                           max="{{ $comida['disponible'] }}"
+                                           data-nombre="{{ $comida['nombre'] }}"
+                                           data-precio="{{ $comida['precio'] }}"
+                                           data-disponible="{{ $comida['disponible'] }}">
+                                    <small class="text-muted d-block mt-1">Stock: {{ $comida['disponible'] }} | ${{ number_format($comida['precio'], 2) }}</small>
+                                </div>
+                            @empty
+                                <p class="text-muted text-center col-12">No hay comidas disponibles hoy</p>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    <!-- Resumen de comidas seleccionadas -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Resumen</label>
+                        <div id="resumenVentaAdmin" class="border rounded p-3 bg-light" style="min-height: 100px;">
+                            <p class="text-muted text-center mb-0">Selecciona comidas para ver el resumen</p>
+                        </div>
+                    </div>
+
+                    <!-- Total -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center bg-success bg-opacity-10 p-3 rounded">
+                            <span class="fw-semibold">Total:</span>
+                            <span class="fs-5 fw-bold text-success" id="totalVentaAdmin">$0.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Método de Pago -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Método de Pago</label>
+                        <select name="metodo_pago" class="form-select" required>
+                            <option value="">-- Seleccionar --</option>
+                            <option value="Efectivo">💵 Efectivo</option>
+                            <option value="Tarjeta">💳 Tarjeta</option>
+                            <option value="Transferencia">🏦 Transferencia</option>
+                        </select>
+                    </div>
+
+                    <!-- Notas -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Notas</label>
+                        <textarea name="notas" class="form-control" placeholder="Ej: Sin picante, para llevar, etc." rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-lg" id="btnProcesarVentaAdmin" disabled>
+                        <i class="bi bi-check-circle me-2"></i>Registrar Venta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.comida-card-admin {
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    padding: 0.75rem;
+    background: white;
+    transition: all 0.3s;
+}
+
+.comida-card-admin:hover {
+    border-color: #10b981;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+}
+
+.comida-card-admin .form-check-label {
+    cursor: pointer;
+    padding: 0.25rem 0;
+}
+
+.comida-card-admin .form-check-input:checked ~ .form-check-label {
+    color: #10b981;
+    font-weight: 600;
+}
+</style>
+
+<script>
+// ==================== FUNCIONALIDAD VENTA RÁPIDA ADMIN ====================
+document.addEventListener('DOMContentLoaded', function() {
+    const cantidadInputsAdmin = document.querySelectorAll('.cantidad-venta-admin');
+    const resumenDivAdmin = document.getElementById('resumenVentaAdmin');
+    const totalSpanAdmin = document.getElementById('totalVentaAdmin');
+    const btnProcesarAdmin = document.getElementById('btnProcesarVentaAdmin');
+    
+    const buscarInputAdmin = document.getElementById('buscarComidaVentaAdmin');
+    const resultadosDivAdmin = document.getElementById('resultadosComidaVentaAdmin');
+    const cantidadBusquedaAdmin = document.getElementById('cantidadBusquedaAdmin');
+    const btnAgregarAdmin = document.getElementById('btnAgregarComidaAdmin');
+    const comidasItemsAdmin = document.querySelectorAll('.comida-check-admin');
+
+    // Crear array de comidas para búsqueda
+    const comidasDisponiblesAdmin = Array.from(comidasItemsAdmin).map(item => ({
+        id: item.dataset.id,
+        abrev: item.dataset.abrev.toLowerCase(),
+        nombre: item.dataset.nombre,
+        disponible: parseInt(item.dataset.disponible),
+        precio: parseFloat(item.dataset.precio),
+        elemento: item
+    }));
+
+    // Funcionalidad del buscador
+    buscarInputAdmin.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        resultadosDivAdmin.innerHTML = '';
+        
+        if (!query) {
+            resultadosDivAdmin.style.display = 'none';
+            return;
+        }
+
+        resultadosDivAdmin.style.display = 'block';
+        const filtradas = comidasDisponiblesAdmin.filter(comida =>
+            comida.abrev.includes(query) ||
+            comida.nombre.toLowerCase().includes(query)
+        );
+
+        if (filtradas.length === 0) {
+            const item = document.createElement('li');
+            item.className = 'list-group-item text-muted';
+            item.textContent = 'No se encontraron comidas';
+            resultadosDivAdmin.appendChild(item);
+            return;
+        }
+
+        filtradas.forEach(comida => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            
+            item.innerHTML = `
+                <div>
+                    <strong>${comida.nombre}</strong>
+                    <small class="text-muted ms-2">${comida.abrev}</small>
+                </div>
+                <i class="bi bi-plus-circle text-success"></i>
+            `;
+
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                buscarInputAdmin.value = comida.abrev.toUpperCase();
+                resultadosDivAdmin.innerHTML = '';
+                resultadosDivAdmin.style.display = 'none';
+                cantidadBusquedaAdmin.focus();
+            });
+
+            resultadosDivAdmin.appendChild(item);
+        });
+    });
+
+    // Agregar comida por búsqueda
+    btnAgregarAdmin.addEventListener('click', function() {
+        const abrev = buscarInputAdmin.value.trim().toLowerCase();
+        const cantidad = parseInt(cantidadBusquedaAdmin.value) || 1;
+
+        if (!abrev) {
+            alert('Ingrese una abreviatura para buscar');
+            buscarInputAdmin.focus();
+            return;
+        }
+
+        const comida = comidasDisponiblesAdmin.find(c => c.abrev === abrev);
+        
+        if (!comida) {
+            alert('No se encontró ninguna comida con esa abreviatura');
+            buscarInputAdmin.focus();
+            return;
+        }
+
+        if (cantidad > comida.disponible) {
+            alert(`Solo hay ${comida.disponible} unidades disponibles`);
+            cantidadBusquedaAdmin.value = comida.disponible;
+            return;
+        }
+
+        // Buscar el input correspondiente y actualizar su valor
+        const inputComida = document.querySelector(`input[name="comidas[${comida.id}]"]`);
+        if (inputComida) {
+            const valorActual = parseInt(inputComida.value) || 0;
+            const nuevoValor = valorActual + cantidad;
+            
+            if (nuevoValor > comida.disponible) {
+                alert(`No se puede agregar esa cantidad. Máximo disponible: ${comida.disponible}`);
+                return;
+            }
+            
+            inputComida.value = nuevoValor;
+            const checkbox = comida.elemento;
+            checkbox.checked = true;
+            actualizarResumenAdmin();
+        }
+
+        // Limpiar buscador
+        buscarInputAdmin.value = '';
+        cantidadBusquedaAdmin.value = 1;
+        resultadosDivAdmin.innerHTML = '';
+        resultadosDivAdmin.style.display = 'none';
+    });
+
+    // Permitir agregar con Enter
+    buscarInputAdmin.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            btnAgregarAdmin.click();
+        }
+    });
+
+    cantidadBusquedaAdmin.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            btnAgregarAdmin.click();
+        }
+    });
+
+    // Cerrar resultados al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!buscarInputAdmin.contains(e.target) && !resultadosDivAdmin.contains(e.target)) {
+            resultadosDivAdmin.innerHTML = '';
+            resultadosDivAdmin.style.display = 'none';
+        }
+    });
+
+    function actualizarResumenAdmin() {
+        let items = [];
+        let total = 0;
+        let hasItems = false;
+
+        cantidadInputsAdmin.forEach(input => {
+            const cantidad = parseInt(input.value) || 0;
+            if (cantidad > 0) {
+                hasItems = true;
+                const nombre = input.dataset.nombre;
+                const precio = parseFloat(input.dataset.precio) || 0;
+                const subtotal = cantidad * precio;
+                total += subtotal;
+
+                items.push({
+                    nombre: nombre,
+                    cantidad: cantidad,
+                    precio: precio,
+                    subtotal: subtotal
+                });
+
+                input.classList.add('selected');
+            } else {
+                input.classList.remove('selected');
+            }
+        });
+
+        // Actualizar resumen
+        if (hasItems) {
+            let html = '';
+            items.forEach(item => {
+                html += `
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                        <div>
+                            <strong>${item.nombre}</strong>
+                            <small class="text-muted d-block">x${item.cantidad} @ $${item.precio.toFixed(2)}</small>
+                        </div>
+                        <span class="text-success fw-bold">$${item.subtotal.toFixed(2)}</span>
+                    </div>
+                `;
+            });
+            resumenDivAdmin.innerHTML = html;
+            btnProcesarAdmin.disabled = false;
+        } else {
+            resumenDivAdmin.innerHTML = '<p class="text-muted text-center mb-0">Selecciona comidas para ver el resumen</p>';
+            btnProcesarAdmin.disabled = true;
+        }
+
+        totalSpanAdmin.textContent = `$${total.toFixed(2)}`;
+    }
+
+    // Escuchar cambios en las cantidades
+    cantidadInputsAdmin.forEach(input => {
+        input.addEventListener('input', function() {
+            const cantidad = parseInt(this.value) || 0;
+            const disponible = parseInt(this.dataset.disponible);
+
+            // Validar que no exceda el stock
+            if (cantidad > disponible) {
+                this.value = disponible;
+                alert(`Solo hay ${disponible} unidades disponibles`);
+            }
+
+            // Validar que no sea negativo
+            if (cantidad < 0) {
+                this.value = 0;
+            }
+
+            actualizarResumenAdmin();
+        });
+    });
+
+    // Validar formulario antes de enviar
+    document.getElementById('formVentaRapida').addEventListener('submit', function(e) {
+        const hasItems = Array.from(cantidadInputsAdmin).some(input => parseInt(input.value) > 0);
+        
+        if (!hasItems) {
+            e.preventDefault();
+            alert('Debe seleccionar al menos una comida para procesar la venta');
+            return false;
+        }
+
+        return confirm('¿Confirmar la venta rápida?');
+    });
+
+    // Reiniciar modal al cerrarlo
+    document.getElementById('ventaRapidaModal').addEventListener('hidden.bs.modal', function() {
+        cantidadInputsAdmin.forEach(input => {
+            input.value = 0;
+            input.classList.remove('selected');
+        });
+        comidasItemsAdmin.forEach(item => item.checked = false);
+        actualizarResumenAdmin();
+        buscarInputAdmin.value = '';
+        cantidadBusquedaAdmin.value = 1;
+        resultadosDivAdmin.innerHTML = '';
+        resultadosDivAdmin.style.display = 'none';
+        document.getElementById('formVentaRapida').reset();
+    });
+});
+</script>
+
 @endsection
