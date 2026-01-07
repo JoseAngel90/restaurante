@@ -95,6 +95,7 @@ Route::post('/clientes/import', [ClienteController::class, 'import'])->name('cli
 
 //Comidas
 Route::get('/comidas', [ComidaController::class, 'index'])->name('comidas.index');
+Route::get('/comidas/buscar', [ComidaController::class, 'buscar'])->name('comidas.buscar');
 Route::post('/comidas', [ComidaController::class, 'store'])->name('comidas.store');
 Route::put('/comidas/{id}', [ComidaController::class, 'update'])->name('comidas.update');
 Route::delete('/comidas/{id}', [ComidaController::class, 'destroy'])->name('comidas.destroy');

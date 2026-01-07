@@ -71,7 +71,7 @@
 
                 <li class="nav-item mb-2">
                     <a href="{{ url('/admin_pedidos') }}" class="nav-link">
-                        <i class="bi bi-card-checklist me-2"></i> Pedidos
+                        <i class="bi bi-card-checklist me-2"></i> Caja
                     </a>
                 </li>
                 <li class="nav-item mb-2">

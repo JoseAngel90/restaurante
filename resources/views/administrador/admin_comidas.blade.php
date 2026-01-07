@@ -682,23 +682,100 @@
 @push('scripts')
 <script>
 function filtrarComidas() {
-    const busca = document.getElementById('buscadorComidas').value.toLowerCase();
-    const items = document.querySelectorAll('.comida-item');
-    let visibles = 0;
+    const busca = document.getElementById('buscadorComidas').value;
+    const contenedor = document.getElementById('contenedorComidas');
+    const paginacion = document.querySelector('.d-flex[role="navigation"]');
+    const sinResultados = document.getElementById('sinResultados');
 
-    items.forEach(item => {
-        const nombre = item.dataset.nombre;
-        const abreviatura = item.dataset.abreviatura;
+    if (busca.length === 0) {
+        // Si el buscador está vacío, mostrar la paginación normal
+        location.reload();
+        return;
+    }
 
-        if (nombre.includes(busca) || abreviatura.includes(busca)) {
-            item.style.display = '';
-            visibles++;
-        } else {
-            item.style.display = 'none';
-        }
-    });
+    // Hacer búsqueda AJAX
+    fetch(`/comidas/buscar?q=${encodeURIComponent(busca)}`)
+        .then(response => response.json())
+        .then(data => {
+            contenedor.innerHTML = '';
+            
+            if (data.comidas.length === 0) {
+                sinResultados.classList.remove('d-none');
+                if (paginacion) paginacion.style.display = 'none';
+            } else {
+                sinResultados.classList.add('d-none');
+                if (paginacion) paginacion.style.display = 'none';
+                
+                data.comidas.forEach(comida => {
+                    const html = crearElementoComida(comida);
+                    contenedor.innerHTML += html;
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error en búsqueda:', error);
+        });
+}
 
-    document.getElementById('sinResultados').classList.toggle('d-none', visibles > 0);
+function crearElementoComida(comida) {
+    const imagenHtml = comida.imagen 
+        ? `<img src="/storage/${comida.imagen}" alt="${comida.nombre}" class="comida-imagen">`
+        : `<div class="comida-imagen-placeholder"><i class="bi bi-image fs-1"></i></div>`;
+    
+    const imagenContent = `
+        <div class="comida-imagen-container">
+            ${imagenHtml}
+        </div>
+    `;
+
+    const stockClass = comida.disponible > 10 ? 'stock-ok' : (comida.disponible > 0 ? 'stock-bajo' : 'stock-agotado');
+    
+    const editar_modal_id = `editComidaModal${comida.id}`;
+    
+    return `
+        <div class="col-md-6 comida-item" data-nombre="${comida.nombre.toLowerCase()}" data-abreviatura="${comida.abreviatura_op.toLowerCase()}">
+            <div class="card comida-card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex gap-3">
+                        ${imagenContent}
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h6 class="mb-1 fw-bold">${comida.nombre}</h6>
+                                    <span class="badge bg-primary">${comida.abreviatura_op}</span>
+                                </div>
+                                <span class="precio-badge">$${parseFloat(comida.precio).toFixed(2)}</span>
+                            </div>
+                            <div class="info-pills mb-2">
+                                <span class="info-pill">
+                                    <i class="bi bi-tag-fill me-1"></i>
+                                    ${comida.tipo_comida || 'Sin categoría'}
+                                </span>
+                                <span class="info-pill">
+                                    <i class="bi bi-diagram-3-fill me-1"></i>
+                                    ${comida.subtipo_comida || 'Sin subcategoría'}
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="stock-badge ${stockClass}">
+                                    <i class="bi bi-box-seam me-1"></i>
+                                    Stock: ${comida.disponible}
+                                </span>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#${editar_modal_id}" title="Editar">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="eliminarComida(${comida.id})" title="Eliminar">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function filtrarCategorias() {
