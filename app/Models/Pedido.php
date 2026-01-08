@@ -51,5 +51,9 @@ class Pedido extends Model
     {
         return $this->hasMany(Ticket::class, 'id_pedido');
     }
-    
+
+    public function ticket()
+    {
+        return $this->hasOne(Ticket::class, 'id_pedido');
+    }
 }

@@ -682,39 +682,25 @@
 @push('scripts')
 <script>
 function filtrarComidas() {
-    const busca = document.getElementById('buscadorComidas').value;
-    const contenedor = document.getElementById('contenedorComidas');
+    const busca = document.getElementById('buscadorComidas').value.toLowerCase();
+    const items = document.querySelectorAll('.comida-item');
     const paginacion = document.querySelector('.d-flex[role="navigation"]');
     const sinResultados = document.getElementById('sinResultados');
+    let visibles = 0;
 
-    if (busca.length === 0) {
-        // Si el buscador está vacío, mostrar la paginación normal
-        location.reload();
-        return;
-    }
+    items.forEach(item => {
+        const nombre = item.dataset.nombre;
+        const abrev  = item.dataset.abreviatura;
+        if (nombre.includes(busca) || abrev.includes(busca)) {
+            item.style.display = '';
+            visibles++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
 
-    // Hacer búsqueda AJAX
-    fetch(`/comidas/buscar?q=${encodeURIComponent(busca)}`)
-        .then(response => response.json())
-        .then(data => {
-            contenedor.innerHTML = '';
-            
-            if (data.comidas.length === 0) {
-                sinResultados.classList.remove('d-none');
-                if (paginacion) paginacion.style.display = 'none';
-            } else {
-                sinResultados.classList.add('d-none');
-                if (paginacion) paginacion.style.display = 'none';
-                
-                data.comidas.forEach(comida => {
-                    const html = crearElementoComida(comida);
-                    contenedor.innerHTML += html;
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error en búsqueda:', error);
-        });
+    if (sinResultados) sinResultados.classList.toggle('d-none', visibles > 0);
+    if (paginacion) paginacion.style.display = busca.length ? 'none' : '';
 }
 
 function crearElementoComida(comida) {

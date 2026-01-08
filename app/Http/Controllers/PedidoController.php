@@ -156,45 +156,57 @@ class PedidoController extends Controller
 
         // Actualizar datos del cliente
         $cliente->update([
-            'nombre' => $request->cliente_nombre,
-            'telefono' => $request->cliente_telefono,
+            'nombre'   => $request->input('cliente_nombre'),
+            'telefono' => $request->input('cliente_telefono'),
         ]);
 
         // Actualizar notas del pedido
         $pedido->update([
-            'notas' => $request->notas,
+            'notas' => $request->input('notas'),
         ]);
 
-        // Actualizar o agregar productos
-        foreach ($request->detalle as $key => $detalle) {
-            $idComida = $detalle['id_comida'];
-            $cantidad = (int) $detalle['cantidad'];
-            $precio = (float) $detalle['precio'];
+        $detallesRequest = $request->input('detalle', []);
+
+        // Crear / actualizar detalles
+        foreach ($detallesRequest as $key => $detalle) {
+            $idComida = $detalle['id_comida'] ?? null;
+            $cantidad = max(0, (int)($detalle['cantidad'] ?? 0));
+            $precio   = (float)($detalle['precio'] ?? 0);
+            $subtotal = $cantidad * $precio;
 
             if (is_numeric($key)) {
-                $detalleExistente = $pedido->detalles->find($key);
+                // Detalle existente
+                $detalleExistente = PedidoDetalle::find($key);
                 if ($detalleExistente) {
                     $detalleExistente->update([
-                        'cantidad' => $cantidad,
+                        'id_comida'       => $idComida,
+                        'cantidad'        => $cantidad,
                         'precio_unitario' => $precio,
-                        'subtotal' => $cantidad * $precio,
+                        'subtotal'        => $subtotal,
                     ]);
                 }
             } else {
+                // Detalle nuevo
                 $pedido->detalles()->create([
-                    'id_comida' => $idComida,
-                    'cantidad' => $cantidad,
+                    'id_comida'       => $idComida,
+                    'cantidad'        => $cantidad,
                     'precio_unitario' => $precio,
-                    'subtotal' => $cantidad * $precio,
+                    'subtotal'        => $subtotal,
                 ]);
             }
         }
 
-        // Eliminar detalles marcados como eliminados
-        if ($request->has('detalle_eliminado')) {
-            foreach ($request->detalle_eliminado as $detalleId) {
-                $pedido->detalles()->where('id', $detalleId)->delete();
-            }
+        // Eliminar detalles marcados
+        $eliminados = array_filter($request->input('detalle_eliminado', []));
+        foreach ($eliminados as $detalleId) {
+            PedidoDetalle::where('id', $detalleId)->delete();
+        }
+
+        // Recalcular total desde BD y actualizar ticket
+        $nuevoTotal = PedidoDetalle::where('id_pedido', $pedido->id)->sum('subtotal');
+        $ticket = Ticket::where('id_pedido', $pedido->id)->first();
+        if ($ticket) {
+            $ticket->update(['total' => $nuevoTotal]);
         }
 
         return back()->with('success', 'Pedido actualizado correctamente.');

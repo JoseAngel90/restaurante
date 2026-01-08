@@ -105,7 +105,10 @@ Route::delete('/comidas/{id}', [ComidaController::class, 'destroy'])->name('comi
 Route::get('/hacer-pedido', [HacerPedidoController::class, 'create'])->name('pedido.create');
 Route::get('/pedido/{pedido}/entregar', [HacerPedidoController::class, 'entregar'])->name('pedido.entregar');
 Route::post('/pedido', [HacerPedidoController::class, 'store'])->name('pedido.store');
-Route::put('/pedido/{pedido}', [HacerPedidoController::class, 'update'])->name('pedido.update');
+
+// ✅ Usa PedidoController@update para que se recalcule y guarde el total
+Route::put('/pedido/{pedido}', [PedidoController::class, 'update'])->name('pedido.update');
+
 Route::put('/pedido/{id}/cancelar', [PedidoController::class, 'cancelar'])->name('pedido.cancelar');
 
 
