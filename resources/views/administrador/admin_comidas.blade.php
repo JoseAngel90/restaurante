@@ -275,6 +275,64 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Modal Genérico para Editar (usado en resultados de búsqueda) -->
+            <div class="modal fade" id="editComidaModalBusqueda" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form id="formEditarBusqueda" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            @method('PUT')
+                            <div class="modal-header bg-success text-white">
+                                <h5 class="modal-title">Editar Comida</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Nombre</label>
+                                    <input type="text" id="editNombreBusqueda" name="nombre" class="form-control" required>
+                                </div>
+
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label fw-semibold">Abreviatura</label>
+                                        <input type="text" id="editAbreviaturaBusqueda" name="abreviatura_op" class="form-control" maxlength="10" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label fw-semibold">Precio</label>
+                                        <input type="number" id="editPrecioBusqueda" name="precio" class="form-control" step="0.01" required>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Stock</label>
+                                    <input type="number" id="editDisponibleBusqueda" name="disponible" class="form-control" min="0" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Subcategoría</label>
+                                    <select id="editSubtipoBusqueda" name="id_subtipo_comida" class="form-select" required>
+                                        @foreach(App\Models\SubtipoComida::with('tipoComida')->get() as $subtipo)
+                                            <option value="{{ $subtipo->id }}">
+                                                {{ $subtipo->tipoComida->descripcion ?? 'Sin tipo' }} → {{ $subtipo->descripcion }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Imagen</label>
+                                    <input type="file" name="imagen" class="form-control" accept="image/*">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-success">Guardar Cambios</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ==================== TAB: CATEGORÍAS ==================== -->
@@ -682,25 +740,44 @@
 @push('scripts')
 <script>
 function filtrarComidas() {
-    const busca = document.getElementById('buscadorComidas').value.toLowerCase();
-    const items = document.querySelectorAll('.comida-item');
+    const busca = document.getElementById('buscadorComidas').value.trim();
+    const contenedor = document.getElementById('contenedorComidas');
     const paginacion = document.querySelector('.d-flex[role="navigation"]');
     const sinResultados = document.getElementById('sinResultados');
-    let visibles = 0;
 
-    items.forEach(item => {
-        const nombre = item.dataset.nombre;
-        const abrev  = item.dataset.abreviatura;
-        if (nombre.includes(busca) || abrev.includes(busca)) {
-            item.style.display = '';
-            visibles++;
-        } else {
-            item.style.display = 'none';
-        }
-    });
+    // Si no hay búsqueda, recargar la página para mostrar paginación
+    if (!busca.length) {
+        location.reload();
+        return;
+    }
 
-    if (sinResultados) sinResultados.classList.toggle('d-none', visibles > 0);
-    if (paginacion) paginacion.style.display = busca.length ? 'none' : '';
+    // Buscar en la base de datos
+    fetch(`/comidas/buscar?q=${encodeURIComponent(busca)}`)
+        .then(response => response.json())
+        .then(data => {
+            const comidas = data.comidas;
+
+            // Si no hay resultados
+            if (comidas.length === 0) {
+                contenedor.innerHTML = '';
+                if (sinResultados) sinResultados.classList.remove('d-none');
+                if (paginacion) paginacion.style.display = 'none';
+                return;
+            }
+
+            // Construir HTML con los resultados
+            let html = '';
+            comidas.forEach(comida => {
+                html += crearElementoComida(comida);
+            });
+
+            contenedor.innerHTML = html;
+            if (sinResultados) sinResultados.classList.add('d-none');
+            if (paginacion) paginacion.style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error en la búsqueda:', error);
+        });
 }
 
 function crearElementoComida(comida) {
@@ -748,10 +825,10 @@ function crearElementoComida(comida) {
                                     Stock: ${comida.disponible}
                                 </span>
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#${editar_modal_id}" title="Editar">
+                                    <button class="btn btn-outline-primary" onclick="abrirModalEditarBusqueda(${comida.id}, '${comida.nombre.replace(/'/g, "\\'")}', '${comida.abreviatura_op}', ${comida.precio}, ${comida.disponible}, ${comida.id_subtipo_comida || 'null'})" title="Editar">
                                         <i class="bi bi-pencil-fill"></i>
                                     </button>
-                                    <button class="btn btn-outline-danger" onclick="eliminarComida(${comida.id})" title="Eliminar">
+                                    <button class="btn btn-outline-danger" onclick="eliminarComidaBusqueda(${comida.id})" title="Eliminar">
                                         <i class="bi bi-trash-fill"></i>
                                     </button>
                                 </div>
@@ -762,6 +839,47 @@ function crearElementoComida(comida) {
             </div>
         </div>
     `;
+}
+
+function abrirModalEditarBusqueda(id, nombre, abreviatura, precio, disponible, id_subtipo) {
+    document.getElementById('editNombreBusqueda').value = nombre;
+    document.getElementById('editAbreviaturaBusqueda').value = abreviatura;
+    document.getElementById('editPrecioBusqueda').value = precio;
+    document.getElementById('editDisponibleBusqueda').value = disponible;
+    if (id_subtipo) {
+        document.getElementById('editSubtipoBusqueda').value = id_subtipo;
+    }
+    
+    // Cambiar la acción del formulario
+    document.getElementById('formEditarBusqueda').action = `/comidas/${id}`;
+    
+    // Abrir modal
+    const modal = new bootstrap.Modal(document.getElementById('editComidaModalBusqueda'));
+    modal.show();
+}
+
+function eliminarComidaBusqueda(id) {
+    if(confirm('¿Eliminar esta comida?')) {
+        fetch(`/comidas/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (response.ok || response.redirected) {
+                // Recargar búsqueda o página
+                location.reload();
+            } else {
+                alert('Error al eliminar la comida');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al eliminar la comida');
+        });
+    }
 }
 
 function filtrarCategorias() {
@@ -841,6 +959,38 @@ function previewNewImage(input) {
         reader.readAsDataURL(input.files[0]);
     }
 }
+
+// Event listener para el formulario de edición de búsqueda
+document.addEventListener('DOMContentLoaded', function() {
+    const formEditarBusqueda = document.getElementById('formEditarBusqueda');
+    if (formEditarBusqueda) {
+        formEditarBusqueda.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const action = this.action;
+            
+            fetch(action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (response.ok || response.redirected) {
+                    location.reload();
+                } else {
+                    alert('Error al actualizar la comida');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al actualizar la comida');
+            });
+        });
+    }
+});
 </script>
 @endpush
 

@@ -110,6 +110,7 @@ class ComidaController extends Controller
                 'precio' => $comida->precio,
                 'disponible' => $comida->disponible,
                 'imagen' => $comida->imagen,
+                'id_subtipo_comida' => $comida->id_subtipo_comida,
                 'tipo_comida' => $comida->subtipoComida?->tipoComida?->descripcion ?? 'Sin categoría',
                 'subtipo_comida' => $comida->subtipoComida?->descripcion ?? 'Sin subcategoría',
             ];
