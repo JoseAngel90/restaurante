@@ -1,0 +1,88 @@
+
+/* ======================= CARDS ======================= */
+.card {
+    border-radius: 1rem;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+    background-color: #ffffff;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+}
+
+/* ======================= CARD HEADER ======================= */
+.card-header {
+    background-color: #f8f9fa !important; /* suave gris */
+    color: #343a40;
+    font-weight: 600;
+    font-size: 1.15rem;
+    border-bottom: none;
+}
+
+/* ======================= TABLE ======================= */
+table {
+    border-collapse: separate;
+    border-spacing: 0 0.5rem;
+}
+
+table th, table td {
+    vertical-align: middle;
+    border: none;
+}
+
+table tbody tr {
+    background-color: #fdfdfd;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s;
+}
+
+table tbody tr:hover {
+    background-color: #f1f3f5;
+}
+
+/* ======================= BOTONES ======================= */
+.btn-primary, .btn-success, .btn-outline-primary, .btn-outline-danger {
+    border-radius: 0.5rem;
+    font-weight: 500;
+    box-shadow: none;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: #0d6efdcc;
+}
+
+.btn-success:hover {
+    background-color: #198754cc;
+}
+
+.btn-outline-primary:hover {
+    background-color: #0d6efd10;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc354510;
+}
+
+/* ======================= INPUTS ======================= */
+.form-control, .form-select {
+    border-radius: 0.5rem;
+    border: 1px solid #ced4da;
+    box-shadow: none;
+    transition: border-color 0.2s;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.15rem rgba(13,110,253,0.25);
+}
+
+/* ======================= RESPONSIVE ======================= */
+@media (max-width: 991px) {
+    .row.g-4 {
+        row-gap: 2rem;
+    }
+}

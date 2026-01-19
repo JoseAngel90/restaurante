@@ -1,0 +1,118 @@
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+header {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    z-index: 1000;
+    transition: margin-left 0.3s ease;
+}
+
+/* Footer */
+footer {
+    font-size: 0.9rem;
+    margin-top: auto;
+    transition: margin-left 0.3s ease;
+}
+
+/* Sidebar */
+#sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 250px;
+    height: 100vh;
+    background-color: #343a40;
+    color: #fff;
+    padding: 1rem;
+    transition: transform 0.3s ease;
+    transform: translateX(-260px); /* Inicia oculto */
+    z-index: 9999;
+    overflow-y: auto;
+}
+
+#sidebar.active {
+    transform: translateX(0); /* Aparece */
+}
+
+#sidebar h4 {
+    margin-bottom: 2rem;
+}
+
+#sidebar .nav-link {
+    color: #fff;
+    transition: all 0.3s;
+}
+
+#sidebar .nav-link:hover {
+    background-color: #495057;
+    border-radius: 5px;
+    padding-left: 1.2rem;
+}
+
+/* Botón cerrar dentro del sidebar */
+#sidebar-close {
+    cursor: pointer;
+}
+
+/* Botón hamburguesa */
+#sidebar-toggle {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1001;
+}
+
+#sidebar-toggle.hide {
+    display: none;
+}
+
+/* Main content */
+#main-content {
+    margin-left: 0;
+    padding: 1rem;
+    transition: margin-left 0.3s ease;
+}
+
+
+
+/* =======================================
+   RESPONSIVE
+======================================= */
+@media (max-width: 991.98px) {
+    #sidebar {
+        transform: translateX(-260px);
+        width: 250px;
+        z-index: 10000;
+    }
+
+    #main-content {
+        margin-left: 0;
+    }
+
+    #main-content.sidebar-active {
+        margin-left: 0; /* No empuja el contenido en móviles */
+    }
+
+    #sidebar.active {
+        box-shadow: 2px 0 12px rgba(0,0,0,0.5);
+    }
+}
+
+@media (max-width: 576px) {
+    #sidebar {
+        width: 200px;
+    }
+
+    #sidebar-toggle {
+        top: 5px;
+        left: 5px;
+        font-size: 1.2rem;
+        padding: 0.3rem 0.6rem;
+    }
+}
