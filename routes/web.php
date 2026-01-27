@@ -13,7 +13,7 @@ use App\Http\Controllers\DisponibilidadComidaDiaController;
 use App\Http\Controllers\SubtipoComidaController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\TicketPrintController;
-
+use App\Http\Controllers\PedidoAdelantadoController;
 
 
 
@@ -33,6 +33,8 @@ use App\Http\Controllers\TicketPrintController;
 | contains the "web" middleware group. Now create something great!
 |
 */
+Route::post('/pedido-adelantado', [PedidoAdelantadoController::class, 'store'])
+->middleware('auth');
 
 Route::get('/', function () {
     return view('login');
