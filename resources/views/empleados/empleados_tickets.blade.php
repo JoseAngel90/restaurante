@@ -3,6 +3,31 @@
 @section('title', 'Tickets Completados')
 
 @section('content')
+@if(auth()->check() && auth()->user()->id_rol == 6)
+<!-- MODAL AUTO REFRESH -->
+<div class="modal fade" id="modalAutoRefresh" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Atención
+                </h5>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-clock-history text-warning" style="font-size:3rem;"></i>
+                <h5 class="mt-3">La página se actualizará pronto</h5>
+                <p class="text-muted">Si tienes algo que guardar o revisar, hazlo ahora.</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 @php
     use Carbon\Carbon;
     use App\Models\Ticket;
@@ -1087,67 +1112,91 @@
 }
 </style>
 
+@push('scripts')
 <script>
-function cambiarTab(tab) {
-    // Remover active de todos los tabs
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-pane-tickets').forEach(pane => {
-        pane.classList.remove('active');
-    });
+document.addEventListener('DOMContentLoaded', function() {
 
-    // Agregar active al tab seleccionado
-    event.target.closest('.tab-btn').classList.add('active');
-    document.getElementById('tab-' + tab).classList.add('active');
-}
-// ==================== IMPRESIÓN DESDE EMPLEADOS TICKETS ====================
-document.querySelectorAll('.btn-imprimir-ticket').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const ticketId = this.dataset.ticketId;
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-        
-        // Mostrar loading
-        const originalHTML = this.innerHTML;
-        this.disabled = true;
-        this.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Imprimiendo...</span>';
-        
-        // Enviar solicitud de impresión
-        fetch(`/ticket/${ticketId}/imprimir`, {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': csrfToken,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Cambiar a verde temporalmente
-                this.classList.add('success');
-                this.innerHTML = '<i class="bi bi-check-circle-fill"></i><span>¡Impreso!</span>';
-                
-                // Volver al estado normal después de 2 segundos
-                setTimeout(() => {
+    // ==================== CAMBIO DE TABS ====================
+    window.cambiarTab = function(tab) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-pane-tickets').forEach(pane => {
+            pane.classList.remove('active');
+        });
+
+        event.target.closest('.tab-btn').classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+    }
+
+    // ==================== IMPRESIÓN DESDE EMPLEADOS TICKETS ====================
+    document.querySelectorAll('.btn-imprimir-ticket').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const ticketId = this.dataset.ticketId;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+            const originalHTML = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Imprimiendo...</span>';
+
+            fetch(`/ticket/${ticketId}/imprimir`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.classList.add('success');
+                    this.innerHTML = '<i class="bi bi-check-circle-fill"></i><span>¡Impreso!</span>';
+
+                    setTimeout(() => {
+                        this.disabled = false;
+                        this.classList.remove('success');
+                        this.innerHTML = originalHTML;
+                    }, 2000);
+                } else {
+                    alert('❌ Error: ' + data.message);
                     this.disabled = false;
-                    this.classList.remove('success');
                     this.innerHTML = originalHTML;
-                }, 2000);
-            } else {
-                alert('❌ Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('❌ Error al conectar con la impresora.');
                 this.disabled = false;
                 this.innerHTML = originalHTML;
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('❌ Error al conectar con la impresora.\nVerifica que esté encendida y conectada.');
-            this.disabled = false;
-            this.innerHTML = originalHTML;
+            });
         });
     });
+
+    @if(auth()->check() && auth()->user()->id_rol == 6)
+
+        // ================= AUTO REFRESH SOLO ROL 6 =================
+        let tiempoTotal = 60;        // segundos
+        let tiempoAdvertencia = 20;  // segundos antes
+
+        const modalRefresh = new bootstrap.Modal(
+            document.getElementById('modalAutoRefresh')
+        );
+
+        setTimeout(() => {
+            modalRefresh.show();
+        }, (tiempoTotal - tiempoAdvertencia) * 1000);
+
+        setTimeout(() => {
+            location.reload();
+        }, tiempoTotal * 1000);
+
+        console.log("⏳ Auto refresh activo (rol 6)");
+
+    @endif
+
 });
 </script>
+@endpush
 
 @endsection

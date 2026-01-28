@@ -7,6 +7,7 @@
 @php
     use App\Models\DisponibilidadComidaDia;
     use Carbon\Carbon;
+    use App\Models\Comida;
 
     $hoy = Carbon::today()->format('Y-m-d');
 
@@ -16,7 +17,20 @@
         ->get();
 
     $categorias = $comidasHoy->groupBy(fn($disp) => strtoupper($disp->comida->tipoComida->descripcion ?? 'SIN CATEGORÍA'));
+    $comidasTodas = Comida::with('tipoComida')
+    ->where('disponible','>',0)
+    ->get();
+
+    $comidasTodasJson = $comidasTodas->map(function($c){
+    return [
+        'id' => $c->id,
+        'nombre' => $c->nombre,
+        'abreviatura' => strtolower($c->abreviatura_op),
+        'categoria' => strtoupper($c->tipoComida->descripcion ?? ''),
+    ];
+});
 @endphp
+
 
 <div class="pedido-container">
     
@@ -24,20 +38,29 @@
     <div class="pedido-header">
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1 class="pedido-title">
-                        <i class="bi bi-basket3-fill"></i>
-                        Nuevo Pedido
-                    </h1>
-                    <p class="pedido-subtitle">Crea un pedido de forma rápida y sencilla</p>
-                </div>
-                <div class="date-badge-pedido">
-                    <i class="bi bi-calendar-event me-2"></i>
-                    {{ \Carbon\Carbon::now()->locale('es')->isoFormat('dddd, D [de] MMMM') }}
-                </div>
-            </div>
-        </div>
+    <div>
+        <h1 class="pedido-title">
+            <i class="bi bi-basket3-fill"></i>
+            Nuevo Pedido
+        </h1>
+        <p class="pedido-subtitle">Crea un pedido de forma rápida y sencilla</p>
     </div>
+
+    <div class="d-flex align-items-center gap-2">
+        <div class="date-badge-pedido">
+            <i class="bi bi-calendar-event me-2"></i>
+            {{ \Carbon\Carbon::now()->locale('es')->isoFormat('dddd, D [de] MMMM') }}
+        </div>
+
+        <!-- 🔥 NUEVO -->
+        <button class="btn btn-warning fw-bold"
+                data-bs-toggle="modal"
+                data-bs-target="#modalPedidoAdelantado">
+            <i class="bi bi-clock-history me-1"></i>
+            Pedido por adelantado
+        </button>
+    </div>
+</div>
 
     <div class="container-fluid py-4">
 
@@ -309,6 +332,150 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalPedidoAdelantado" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content modal-pedido">
+
+      <div class="modal-header-pedido modal-warning">
+        <div class="modal-icon-pedido">
+          <i class="bi bi-clock-history"></i>
+        </div>
+        <div>
+          <h5 class="modal-title-pedido">Pedido por adelantado</h5>
+          <small>Este pedido se guarda aparte</small>
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- TODO VA DENTRO DE ESTE BODY -->
+      <div class="modal-body-pedido">
+
+        <!-- FORM -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label-pedido">Nombre del cliente</label>
+            <input type="text" id="cliente_nombre_adelantado" class="form-input-pedido">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label-pedido">Teléfono</label>
+            <input type="text" id="cliente_telefono_adelantado" class="form-input-pedido">
+          </div>
+
+
+          <div class="col-md-6">
+            <label class="form-label-pedido">Notas</label>
+            <textarea id="notas_adelantado" class="form-textarea-pedido" rows="2"></textarea>
+            <small class="text-muted d-flex align-items-center gap-1 mt-1">
+            <i class="bi bi-clock-history"></i>
+            Especifica aquí el día y la hora en que pasarán a recoger el pedido...
+           </small>
+          </div>
+        </div>
+
+        <!-- PLATILLOS AGREGADOS -->
+        <div class="card-pedido mt-4 mb-4">
+          <div class="card-pedido-header">
+            <div class="header-content">
+              <div class="header-icon">
+                <i class="bi bi-receipt"></i>
+              </div>
+              <div>
+                <h5 class="header-title">Platillos agregados</h5>
+                <p class="header-desc">Pedido adelantado</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-pedido-body">
+            <div id="listaAdelantado"></div>
+
+            <button class="btn btn-success w-100 mt-3"
+                    onclick="registrarPedidoAdelantado()">
+              Registrar pedido adelantado
+            </button>
+          </div>
+        </div>
+        <!-- FILTROS -->
+         <div id="filtrosAdelantado" class="d-flex flex-wrap gap-2 mb-3">
+         <button class="btn btn-sm btn-primary filtro-btn active" data-cat="TODOS">Todos</button>
+         <button class="btn btn-sm btn-outline-primary filtro-btn" data-cat="PLATO FUERTE">Plato fuerte</button>
+         <button class="btn btn-sm btn-outline-primary filtro-btn" data-cat="SOPA">Sopa</button>
+         <button class="btn btn-sm btn-outline-primary filtro-btn" data-cat="ENSALADAS">Ensaladas</button>
+         <button class="btn btn-sm btn-outline-primary filtro-btn" data-cat="POSTRES">Postres</button>
+         <button class="btn btn-sm btn-outline-primary filtro-btn" data-cat="AGUA">Agua</button>
+        </div>
+
+        <!-- BUSCADOR -->
+        <input type="text" id="buscadorAdelantado"
+               class="form-input-pedido mb-3"
+               placeholder="Buscar comida...">
+
+        <!-- MENÚ -->
+        <div id="contenedorAdelantado" class="menu-grid"></div>
+
+      </div> <!-- CIERRE ÚNICO DE modal-body -->
+
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="modalAdelantadoVacio" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content modal-pedido">
+
+      <div class="modal-header-pedido modal-warning">
+        <div class="modal-icon-pedido">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+        </div>
+        <div>
+          <h5 class="modal-title-pedido">Pedido vacío</h5>
+          <p class="modal-subtitle-pedido">No hay platillos agregados</p>
+        </div>
+      </div>
+
+      <div class="modal-body-pedido text-center">
+        Debes agregar al menos un platillo al pedido adelantado.
+      </div>
+
+      <div class="modal-footer-pedido">
+        <button class="btn-modal-pedido btn-warning-modal" data-bs-dismiss="modal">
+          Entendido
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalDatosIncompletos" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content modal-pedido">
+
+      <div class="modal-header-pedido modal-danger">
+        <div class="modal-icon-pedido">
+          <i class="bi bi-person-x-fill"></i>
+        </div>
+        <div>
+          <h5 class="modal-title-pedido">Datos incompletos</h5>
+          <p class="modal-subtitle-pedido">Faltan campos obligatorios</p>
+        </div>
+      </div>
+
+      <div class="modal-body-pedido text-center">
+        Nombre del cliente y teléfono son obligatorios.
+      </div>
+
+      <div class="modal-footer-pedido">
+        <button class="btn-modal-pedido btn-danger-modal" data-bs-dismiss="modal">
+          Entendido
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 
 <style>
 /* ==================== VARIABLES ==================== */
@@ -982,12 +1149,21 @@
 .menu-card-body::-webkit-scrollbar-thumb:hover {
     background: var(--color-text-muted);
 }
+#modalPedidoAdelantado .modal-body-pedido{
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+#modalPedidoAdelantado .menu-grid{
+    max-height: none;
+}
 </style>
 
 @endsection
 
 @push('scripts')
 <script>
+    const comidasTodas = @json($comidasTodasJson);
 // Toggle menú
 function toggleMenu() {
     const menu = document.getElementById('menuGrid');
@@ -1207,6 +1383,217 @@ document.addEventListener('DOMContentLoaded', function() {
             inputTelefono.value = '';
         }
     });
+    // ================== PEDIDO ADELANTADO ==================
+
+let carritoAdelantado = [];
+
+const modalAdelantado = document.getElementById('modalPedidoAdelantado');
+const contenedorAdelantado = document.getElementById('contenedorAdelantado');
+const buscadorAdelantado = document.getElementById('buscadorAdelantado');
+
+let categoriaActiva = "TODOS";
+
+document.querySelectorAll('.filtro-btn').forEach(btn => {
+    btn.addEventListener('click', function(){
+
+        document.querySelectorAll('.filtro-btn').forEach(b => {
+            b.classList.remove('btn-primary','active');
+            b.classList.add('btn-outline-primary');
+        });
+
+        this.classList.remove('btn-outline-primary');
+        this.classList.add('btn-primary','active');
+
+        categoriaActiva = this.dataset.cat;
+        aplicarFiltros();
+    });
+});
+
+modalAdelantado.addEventListener('shown.bs.modal', () => {
+    buscadorAdelantado.value = '';
+    categoriaActiva = "TODOS";
+
+    document.querySelectorAll('.filtro-btn').forEach(b => {
+        b.classList.remove('btn-primary','active');
+        b.classList.add('btn-outline-primary');
+    });
+
+    document.querySelector('.filtro-btn[data-cat="TODOS"]')
+        .classList.remove('btn-outline-primary');
+    document.querySelector('.filtro-btn[data-cat="TODOS"]')
+        .classList.add('btn-primary','active');
+
+    carritoAdelantado = [];
+    renderCarritoAdelantado();
+    renderAdelantado(comidasTodas);
+});
+
+
+buscadorAdelantado.addEventListener('input', aplicarFiltros);
+
+function aplicarFiltros(){
+    const texto = buscadorAdelantado.value.toLowerCase();
+
+    let filtradas = comidasTodas.filter(c =>
+        c.nombre.toLowerCase().includes(texto) ||
+        c.abreviatura.includes(texto)
+    );
+
+    if(categoriaActiva !== "TODOS"){
+        filtradas = filtradas.filter(c => c.categoria === categoriaActiva);
+    }
+
+    renderAdelantado(filtradas);
+}
+
+function renderAdelantado(lista){
+    contenedorAdelantado.innerHTML = '';
+
+    lista.forEach(c => {
+        contenedorAdelantado.innerHTML += `
+            <div class="menu-card">
+                <div class="menu-card-body text-center">
+                    <div class="menu-item-badge mb-1">${c.abreviatura.toUpperCase()}</div>
+                    <div class="fw-bold">${c.nombre}</div>
+
+                    <input type="number" min="1" value="1"
+                        class="form-input-pedido cantidad-adelantado mt-2">
+
+                   <button type="button"
+                     class="btn btn-warning fw-bold w-100 mt-2"
+                     onclick="agregarAdelantado(${c.id}, this)">
+                    Agregar
+                    </button>
+
+                </div>
+            </div>
+        `;
+    });
+}
+
+window.agregarAdelantado = function(id, btn){
+    const card = btn.closest('.menu-card-body');
+    const cantidad = parseInt(card.querySelector('.cantidad-adelantado').value);
+
+    if(cantidad <= 0) return;
+
+    const comida = comidasTodas.find(c => c.id == id);
+    const existe = carritoAdelantado.find(c => c.id == id);
+
+    if(existe){
+        existe.cantidad += cantidad;
+    } else {
+        carritoAdelantado.push({
+            id: comida.id,
+            nombre: comida.nombre,
+            cantidad: cantidad
+        });
+    }
+
+    renderCarritoAdelantado();
+}
+
+function renderCarritoAdelantado(){
+    const cont = document.getElementById('listaAdelantado');
+    cont.innerHTML = '';
+
+    if(carritoAdelantado.length === 0){
+        cont.innerHTML = `<small class="text-muted">No hay platillos agregados.</small>`;
+        return;
+    }
+
+    carritoAdelantado.forEach((c,i)=>{
+        cont.innerHTML += `
+            <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+                <div>
+                    <b>${c.nombre}</b><br>
+                    <small class="text-muted">Cantidad: ${c.cantidad}</small>
+                </div>
+                <button class="btn btn-sm btn-danger"
+                        onclick="quitarAdelantado(${i})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+    });
+}
+
+
+function quitarAdelantado(i){
+    carritoAdelantado.splice(i,1);
+    renderCarritoAdelantado();
+}
+
+window.registrarPedidoAdelantado = function(){
+
+    // 1️⃣ Validar carrito
+    if(carritoAdelantado.length === 0){
+        new bootstrap.Modal(document.getElementById('modalAdelantadoVacio')).show();
+        return;
+    }
+
+    // 2️⃣ Tomar valores UNA SOLA VEZ
+    const nombre = document.getElementById('cliente_nombre_adelantado').value.trim();
+    const telefono = document.getElementById('cliente_telefono_adelantado').value.trim();
+    const notas = document.getElementById('notas_adelantado').value;
+    const tiempo = null;
+
+    // 3️⃣ Validar datos
+    if(!nombre || !telefono){
+        new bootstrap.Modal(document.getElementById('modalDatosIncompletos')).show();
+        return;
+    }
+
+    // 4️⃣ Enviar fetch usando LAS VARIABLES
+    fetch('/pedido-adelantado',{
+        method:'POST',
+        headers:{
+            'Content-Type':'application/json',
+            'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+        },
+        body: JSON.stringify({
+            cliente_nombre: nombre,
+            cliente_telefono: telefono,
+            notas: notas,
+            tiempo_entrega: tiempo,
+            comidas: carritoAdelantado
+        })
+    })
+    .then(r => r.json())
+    .then(r => {
+
+        if(!r.ok){
+            alert("Error: " + r.error + " | línea: " + r.linea);
+            return;
+        }
+
+        const contenedorPedido = document.querySelector('.pedido-container');
+
+        const alerta = document.createElement('div');
+        alerta.className = "container-fluid mt-3";
+        alerta.innerHTML = `
+            <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                Pedido adelantado registrado correctamente.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+
+        contenedorPedido.before(alerta);
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        carritoAdelantado = [];
+        renderCarritoAdelantado();
+        bootstrap.Modal.getInstance(modalAdelantado).hide();
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error de conexión con el servidor");
+    });
+
+}
+
 });
 </script>
 @endpush

@@ -1259,6 +1259,34 @@ window.toggleSection = function(section) {
 };
 </style>
 
+@if(auth()->check() && auth()->user()->id_rol == 6)
+<!-- MODAL DE ADVERTENCIA AUTO REFRESH -->
+<div class="modal fade" id="modalAutoRefresh" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Atención
+                </h5>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-clock-history text-warning" style="font-size:3rem;"></i>
+                <h5 class="mt-3">La página se actualizará pronto</h5>
+                <p class="text-muted">
+                    Si tienes algo que guardar o revisar, hazlo ahora.
+                </p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 @endsection
 
 @push('scripts')
@@ -1594,6 +1622,31 @@ document.addEventListener('DOMContentLoaded', function() {
         resultadosDiv.innerHTML = '';
         this.querySelector('form').reset();
     });
+
+    @if(auth()->check() && auth()->user()->id_rol == 6)
+
+    // ================= AUTO REFRESH DESPACHADOR =================
+    let tiempoTotal = 60;        // 1 minuto
+    let tiempoAdvertencia = 20;  // aviso 20s antes
+
+    const modalRefresh = new bootstrap.Modal(
+        document.getElementById('modalAutoRefresh')
+    );
+
+    // Mostrar advertencia
+    setTimeout(() => {
+        modalRefresh.show();
+    }, (tiempoTotal - tiempoAdvertencia) * 1000);
+
+    // Recargar página
+    setTimeout(() => {
+        location.reload();
+    }, tiempoTotal * 1000);
+
+    console.log("⏳ Auto refresh activo para despachador");
+
+@endif
+
 });
 </script>
 @endpush
