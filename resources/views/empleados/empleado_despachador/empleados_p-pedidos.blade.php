@@ -32,6 +32,14 @@ $pedidosEnCaja = App\Models\Pedido::whereHas('tickets', function($q) {
 @endphp
 
 <div class="despachador-container">
+    {{-- CONTADOR FLOTANTE AUTO-REFRESH --}}
+    @if(auth()->check() && auth()->user()->id_rol == 6)
+    <div class="auto-refresh-indicator-floating" id="autoRefreshIndicator">
+        <i class="bi bi-arrow-clockwise"></i>
+        <span id="contadorRefresh">60s</span>
+    </div>
+    @endif
+
     {{-- HEADER --}}
     <div class="main-header">
         <div class="header-left">
@@ -593,6 +601,12 @@ body {
     gap: 1rem;
 }
 
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 .header-icon {
     width: 60px;
     height: 60px;
@@ -637,6 +651,79 @@ body {
     background: #059669;
     transform: translateY(-2px);
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+}
+
+/* ==================== AUTO REFRESH INDICATOR FLOATING ==================== */
+.auto-refresh-indicator-floating {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 700;
+    font-size: 1.125rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    z-index: 9999;
+    animation: pulse 2s infinite;
+    cursor: default;
+    transition: all 0.3s ease;
+}
+
+.auto-refresh-indicator-floating:hover {
+    transform: scale(1.05);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+}
+
+.auto-refresh-indicator-floating i {
+    font-size: 1.5rem;
+    animation: rotate 3s linear infinite;
+}
+
+.auto-refresh-indicator-floating.warning {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    animation: shake 0.5s infinite, pulse 2s infinite;
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.5);
+}
+
+.auto-refresh-indicator-floating span {
+    font-size: 1.25rem;
+    min-width: 45px;
+    text-align: center;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-5px);
+    }
+    75% {
+        transform: translateX(5px);
+    }
 }
 
 /* ==================== STATS ==================== */
@@ -1201,6 +1288,22 @@ body {
         align-items: stretch;
     }
 
+    .auto-refresh-indicator-floating {
+        bottom: 15px;
+        right: 15px;
+        padding: 0.75rem 1.25rem;
+        font-size: 1rem;
+    }
+
+    .auto-refresh-indicator-floating i {
+        font-size: 1.25rem;
+    }
+
+    .auto-refresh-indicator-floating span {
+        font-size: 1rem;
+        min-width: 40px;
+    }
+
     .stats-grid {
         grid-template-columns: 1fr;
     }
@@ -1628,10 +1731,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // ================= AUTO REFRESH DESPACHADOR =================
     let tiempoTotal = 60;        // 1 minuto
     let tiempoAdvertencia = 20;  // aviso 20s antes
+    let tiempoRestante = tiempoTotal;
 
     const modalRefresh = new bootstrap.Modal(
         document.getElementById('modalAutoRefresh')
     );
+    const contadorElement = document.getElementById('contadorRefresh');
+    const indicadorElement = document.getElementById('autoRefreshIndicator');
+
+    // Actualizar contador cada segundo
+    const intervalo = setInterval(() => {
+        tiempoRestante--;
+        
+        if (tiempoRestante > 0) {
+            contadorElement.textContent = `${tiempoRestante}s`;
+            
+            // Cambiar a advertencia cuando quedan 20s o menos
+            if (tiempoRestante <= tiempoAdvertencia) {
+                indicadorElement.classList.add('warning');
+            }
+        } else {
+            clearInterval(intervalo);
+        }
+    }, 1000);
 
     // Mostrar advertencia
     setTimeout(() => {
@@ -1643,7 +1765,7 @@ document.addEventListener('DOMContentLoaded', function() {
         location.reload();
     }, tiempoTotal * 1000);
 
-    console.log("⏳ Auto refresh activo para despachador");
+    console.log("⏳ Auto refresh activo para despachador - Tiempo total: " + tiempoTotal + "s");
 
 @endif
 
