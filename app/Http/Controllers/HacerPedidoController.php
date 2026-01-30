@@ -140,6 +140,11 @@ class HacerPedidoController extends Controller
                 $tieneComboBase = $cantidadPlatoFuerte >= 1 && $tieneSopa && $tieneEnsaladas;
                 $esComboPerFecto = $tieneComboBase;
 
+                // Contadores para rastrear cuántas unidades de cada tipo ya se procesaron en este paquete
+                $contadorPlatoFuerte = 0;
+                $contadorSopa = 0;
+                $contadorEnsaladas = 0;
+
                 // Debug para verificar
                 \Log::info("Paquete {$numeroPaquete}: PF={$cantidadPlatoFuerte}, Sopa={$tieneSopa}, Ensaladas={$tieneEnsaladas}, Tipos=".count($tiposEnPaquete).", ComboPerFecto={$esComboPerFecto}");
 
@@ -159,9 +164,15 @@ class HacerPedidoController extends Controller
                     // Procesar según el tipo y si es combo perfecto
                     if ($tipoComida === 'PLATO FUERTE') {
                         if ($esComboPerFecto) {
-                            // Combo perfecto: $95 el plato fuerte
-                            $precioUnitario = 95;
-                            $subtotal = $cantidad * $precioUnitario;
+                            // Determinar cuántas unidades son del combo y cuántas son extras
+                            $unidadesCombo = max(0, min(1 - $contadorPlatoFuerte, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesCombo;
+                            
+                            // Combo perfecto: primer plato fuerte = $95, extras = precio original
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = ($unidadesCombo * 95) + ($unidadesExtras * $precioUnitario);
+                            
+                            $contadorPlatoFuerte += $cantidad;
                         } else {
                             // Sin combo perfecto: precio normal del plato fuerte
                             $precioUnitario = $comida->precio ?? 0;
@@ -180,12 +191,46 @@ class HacerPedidoController extends Controller
                         $comida->decrement('disponible', $cantidad);
                         $totalPedido += $subtotal;
 
-                    } elseif (in_array($tipoComida, $tiposIncluidos)) {
+                    } elseif ($tipoComida === 'SOPA') {
                         if ($esComboPerFecto) {
-                            // En combo perfecto: primera unidad gratis, extras con precio
-                            $cantidadConPrecio = max(0, $cantidad - 1);
+                            // Determinar cuántas unidades están incluidas y cuántas son extras
+                            $unidadesIncluidas = max(0, min(1 - $contadorSopa, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesIncluidas;
+                            
+                            // Primera sopa incluida en combo ($0), extras = precio original
                             $precioUnitario = $comida->precio ?? 0;
-                            $subtotal = $cantidadConPrecio * $precioUnitario;
+                            $subtotal = $unidadesExtras * $precioUnitario;
+                            
+                            $contadorSopa += $cantidad;
+                        } else {
+                            // Sin combo perfecto: todas con precio
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = $cantidad * $precioUnitario;
+                        }
+
+                        PedidoDetalle::create([
+                            'id_pedido' => $pedido->id,
+                            'id_comida' => $comidaId,
+                            'cantidad' => $cantidad,
+                            'precio_unitario' => $precioUnitario,
+                            'subtotal' => $subtotal,
+                            'numero_paquete' => $numeroPaquete,
+                        ]);
+
+                        $comida->decrement('disponible', $cantidad);
+                        $totalPedido += $subtotal;
+
+                    } elseif ($tipoComida === 'ENSALADAS') {
+                        if ($esComboPerFecto) {
+                            // Determinar cuántas unidades están incluidas y cuántas son extras
+                            $unidadesIncluidas = max(0, min(1 - $contadorEnsaladas, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesIncluidas;
+                            
+                            // Primera ensalada incluida en combo ($0), extras = precio original
+                            $precioUnitario = $comida->precio ?? 0;
+                            $subtotal = $unidadesExtras * $precioUnitario;
+                            
+                            $contadorEnsaladas += $cantidad;
                         } else {
                             // Sin combo perfecto: todas con precio
                             $precioUnitario = $comida->precio ?? 0;
@@ -276,6 +321,57 @@ class HacerPedidoController extends Controller
             $pedido->notas = $request->notas;
             $pedido->save();
 
+            $normalizarTipo = function ($descripcion) {
+                $t = strtoupper($descripcion ?? '');
+                if (str_contains($t, 'PLATO FUERTE') || str_contains($t, 'PLATO')) {
+                    return 'PLATO FUERTE';
+                }
+                if (str_contains($t, 'SOPA')) {
+                    return 'SOPA';
+                }
+                if (str_contains($t, 'ENSAL')) {
+                    return 'ENSALADAS';
+                }
+                return $t;
+            };
+
+            $detallesExistentes = PedidoDetalle::with('comida.tipoComida')
+                ->where('id_pedido', $pedido->id)
+                ->get();
+            $paquetesExistentes = $detallesExistentes->groupBy(function ($detalle) {
+                return $detalle->numero_paquete ?? 1;
+            });
+
+            $numeroPaqueteDefault = null;
+            foreach ($paquetesExistentes as $numeroPaquete => $detallesPaquete) {
+                $cantidadPlatoFuerte = 0;
+                $tieneSopa = false;
+                $tieneEnsaladas = false;
+
+                foreach ($detallesPaquete as $detalle) {
+                    $tipo = $normalizarTipo($detalle->comida->tipoComida->descripcion ?? '');
+                    if ($tipo === 'PLATO FUERTE') {
+                        $cantidadPlatoFuerte += $detalle->cantidad;
+                    }
+                    if ($tipo === 'SOPA') {
+                        $tieneSopa = true;
+                    }
+                    if ($tipo === 'ENSALADAS') {
+                        $tieneEnsaladas = true;
+                    }
+                }
+
+                if ($cantidadPlatoFuerte >= 1 && $tieneSopa && $tieneEnsaladas) {
+                    $numeroPaqueteDefault = intval($numeroPaquete);
+                    break;
+                }
+            }
+
+            if ($numeroPaqueteDefault === null) {
+                $maxPaquete = $paquetesExistentes->keys()->max();
+                $numeroPaqueteDefault = $maxPaquete ? intval($maxPaquete) : 1;
+            }
+
             // Procesar detalle
             foreach ($request->detalle as $key => $item) {
                 $cantidad = intval($item['cantidad'] ?? 0);
@@ -296,8 +392,9 @@ class HacerPedidoController extends Controller
                         'id_pedido' => $pedido->id,
                         'id_comida' => $idComida,
                         'cantidad' => $cantidad,
-                        'precio_unitario' => $precio ?? $comida->precio,
-                        'subtotal' => $cantidad * ($precio ?? $comida->precio),
+                        'precio_unitario' => $comida->precio ?? 0,
+                        'subtotal' => $cantidad * ($comida->precio ?? 0),
+                        'numero_paquete' => $numeroPaqueteDefault,
                     ]);
 
                     $comida->decrement('disponible', $cantidad);
@@ -332,10 +429,89 @@ class HacerPedidoController extends Controller
 
                 // Actualizar detalle
                 $detalle->cantidad = $cantidad;
-                if ($precio) $detalle->precio_unitario = $precio;
-                $detalle->subtotal = $detalle->cantidad * $detalle->precio_unitario;
                 $detalle->save();
             }
+
+            // Recalcular subtotales respetando combo perfecto por paquete
+            $detallesActualizados = PedidoDetalle::with('comida.tipoComida')
+                ->where('id_pedido', $pedido->id)
+                ->get();
+            $detallesPorPaquete = $detallesActualizados->groupBy(function ($detalle) {
+                return $detalle->numero_paquete ?? 1;
+            });
+
+            foreach ($detallesPorPaquete as $numeroPaquete => $detallesPaquete) {
+                $cantidadPlatoFuerte = 0;
+                $tieneSopa = false;
+                $tieneEnsaladas = false;
+
+                foreach ($detallesPaquete as $detalle) {
+                    $tipo = $normalizarTipo($detalle->comida->tipoComida->descripcion ?? '');
+                    if ($tipo === 'PLATO FUERTE') {
+                        $cantidadPlatoFuerte += $detalle->cantidad;
+                    }
+                    if ($tipo === 'SOPA') {
+                        $tieneSopa = true;
+                    }
+                    if ($tipo === 'ENSALADAS') {
+                        $tieneEnsaladas = true;
+                    }
+                }
+
+                $esComboPerFecto = $cantidadPlatoFuerte >= 1 && $tieneSopa && $tieneEnsaladas;
+
+                $contadorPlatoFuerte = 0;
+                $contadorSopa = 0;
+                $contadorEnsaladas = 0;
+
+                foreach ($detallesPaquete->sortBy('id') as $detalle) {
+                    $comida = $detalle->comida;
+                    $cantidad = $detalle->cantidad;
+                    $tipo = $normalizarTipo($comida->tipoComida->descripcion ?? '');
+                    $precioBase = $comida->precio ?? $detalle->precio_unitario ?? 0;
+
+                    if ($tipo === 'PLATO FUERTE') {
+                        if ($esComboPerFecto) {
+                            $unidadesCombo = max(0, min(1 - $contadorPlatoFuerte, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesCombo;
+                            $subtotal = ($unidadesCombo * 95) + ($unidadesExtras * $precioBase);
+                            $contadorPlatoFuerte += $cantidad;
+                        } else {
+                            $subtotal = $cantidad * $precioBase;
+                        }
+                    } elseif ($tipo === 'SOPA') {
+                        if ($esComboPerFecto) {
+                            $unidadesIncluidas = max(0, min(1 - $contadorSopa, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesIncluidas;
+                            $subtotal = $unidadesExtras * $precioBase;
+                            $contadorSopa += $cantidad;
+                        } else {
+                            $subtotal = $cantidad * $precioBase;
+                        }
+                    } elseif ($tipo === 'ENSALADAS') {
+                        if ($esComboPerFecto) {
+                            $unidadesIncluidas = max(0, min(1 - $contadorEnsaladas, $cantidad));
+                            $unidadesExtras = $cantidad - $unidadesIncluidas;
+                            $subtotal = $unidadesExtras * $precioBase;
+                            $contadorEnsaladas += $cantidad;
+                        } else {
+                            $subtotal = $cantidad * $precioBase;
+                        }
+                    } else {
+                        $subtotal = $cantidad * $precioBase;
+                    }
+
+                    $detalle->precio_unitario = $cantidad > 0 ? round($subtotal / $cantidad, 2) : $precioBase;
+                    $detalle->subtotal = $subtotal;
+                    if (!$detalle->numero_paquete) {
+                        $detalle->numero_paquete = $numeroPaquete;
+                    }
+                    $detalle->save();
+                }
+            }
+
+            $nuevoTotal = PedidoDetalle::where('id_pedido', $pedido->id)->sum('subtotal');
+            Ticket::where('id_pedido', $pedido->id)->update(['total' => $nuevoTotal]);
 
             DB::commit();
             return redirect()->back()->with('success', 'Pedido actualizado correctamente.');

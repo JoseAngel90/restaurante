@@ -165,33 +165,67 @@ class PedidoController extends Controller
             'notas' => $request->input('notas'),
         ]);
 
+        $normalizarTipo = function ($descripcion) {
+            $t = strtoupper($descripcion ?? '');
+            if (str_contains($t, 'PLATO FUERTE') || str_contains($t, 'PLATO')) {
+                return 'PLATO FUERTE';
+            }
+            if (str_contains($t, 'SOPA')) {
+                return 'SOPA';
+            }
+            if (str_contains($t, 'ENSAL')) {
+                return 'ENSALADAS';
+            }
+            return $t;
+        };
+
+        $detallesExistentes = PedidoDetalle::with('comida.tipoComida')
+            ->where('id_pedido', $pedido->id)
+            ->get();
+        $paquetesExistentes = $detallesExistentes->groupBy(function ($detalle) {
+            return $detalle->numero_paquete ?? 1;
+        });
+
+        // Nuevos productos del modal se agregan como paquete extra
+        $maxPaquete = $paquetesExistentes->keys()->max();
+        $numeroPaqueteDefault = $maxPaquete ? intval($maxPaquete) + 1 : 1;
+
         $detallesRequest = $request->input('detalle', []);
 
-        // Crear / actualizar detalles
+        // Crear / actualizar detalles (sin usar precios del formulario)
         foreach ($detallesRequest as $key => $detalle) {
             $idComida = $detalle['id_comida'] ?? null;
             $cantidad = max(0, (int)($detalle['cantidad'] ?? 0));
-            $precio   = (float)($detalle['precio'] ?? 0);
-            $subtotal = $cantidad * $precio;
 
             if (is_numeric($key)) {
-                // Detalle existente
                 $detalleExistente = PedidoDetalle::find($key);
                 if ($detalleExistente) {
-                    $detalleExistente->update([
-                        'id_comida'       => $idComida,
-                        'cantidad'        => $cantidad,
-                        'precio_unitario' => $precio,
-                        'subtotal'        => $subtotal,
-                    ]);
+                    if ($cantidad === 0) {
+                        $detalleExistente->delete();
+                    } else {
+                        $precioUnitario = $detalleExistente->cantidad > 0
+                            ? ($detalleExistente->subtotal / $detalleExistente->cantidad)
+                            : ($detalleExistente->precio_unitario ?? 0);
+                        $detalleExistente->update([
+                            'id_comida' => $idComida,
+                            'cantidad'  => $cantidad,
+                            'precio_unitario' => round($precioUnitario, 2),
+                            'subtotal'  => $cantidad * $precioUnitario,
+                        ]);
+                    }
                 }
             } else {
-                // Detalle nuevo
+                if (!$idComida || $cantidad === 0) {
+                    continue;
+                }
+                $comida = Comida::find($idComida);
+                $precioBase = $comida->precio ?? 0;
                 $pedido->detalles()->create([
                     'id_comida'       => $idComida,
                     'cantidad'        => $cantidad,
-                    'precio_unitario' => $precio,
-                    'subtotal'        => $subtotal,
+                    'precio_unitario' => $precioBase,
+                    'subtotal'        => $cantidad * $precioBase,
+                    'numero_paquete'  => $numeroPaqueteDefault,
                 ]);
             }
         }
@@ -202,6 +236,7 @@ class PedidoController extends Controller
             PedidoDetalle::where('id', $detalleId)->delete();
         }
 
+        // Recalcular subtotales respetando combo perfecto por paquete
         // Recalcular total desde BD y actualizar ticket
         $nuevoTotal = PedidoDetalle::where('id_pedido', $pedido->id)->sum('subtotal');
         $ticket = Ticket::where('id_pedido', $pedido->id)->first();

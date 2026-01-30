@@ -27,8 +27,8 @@
         ->get();
 
     // Estadísticas
-    $ticketsPagados = $tickets->where('tipoTicket.nombre', 'Pagado');
-    $ticketsCancelados = $tickets->where('tipoTicket.nombre', 'Cancelado');
+    $ticketsPagados = $tickets->where('tipoTicket.nombre', 'Pagado')->sortByDesc('fecha_ticket');
+    $ticketsCancelados = $tickets->where('tipoTicket.nombre', 'Cancelado')->sortByDesc('fecha_ticket');
     $totalIngresos = $ticketsPagados->sum('total');
 @endphp
 
@@ -222,6 +222,19 @@
                                             <span>Información de Pago</span>
                                         </div>
                                         <div class="pago-details-admin">
+                                            @php
+                                                $totalBaseTicket = $ticket->pedido->detalles->sum(fn($item) => $item->subtotal);
+                                                $esTarjeta = $ticket->tipoPago && strtolower($ticket->tipoPago->nombre) === 'tarjeta';
+                                                $requiereFactura = (bool) ($ticket->requiere_factura ?? false);
+                                                $porcentajeRecargo = 0;
+                                                if ($esTarjeta) {
+                                                    $porcentajeRecargo += 4;
+                                                }
+                                                if ($requiereFactura) {
+                                                    $porcentajeRecargo += 16;
+                                                }
+                                                $montoRecargo = $totalBaseTicket * ($porcentajeRecargo / 100);
+                                            @endphp
                                             <div class="pago-row-admin">
                                                 <span class="pago-label-admin">
                                                     <i class="bi bi-wallet2"></i>
@@ -240,6 +253,28 @@
                                                     {{ $ticket->tipoPago->nombre ?? 'N/A' }}
                                                 </span>
                                             </div>
+
+                                            <div class="pago-row-admin">
+                                                <span class="pago-label-admin">
+                                                    <i class="bi bi-receipt"></i>
+                                                    Factura:
+                                                </span>
+                                                <span class="pago-value-admin">
+                                                    {{ $requiereFactura ? 'Sí' : 'No' }}
+                                                </span>
+                                            </div>
+
+                                            @if($porcentajeRecargo > 0)
+                                                <div class="pago-row-admin">
+                                                    <span class="pago-label-admin">
+                                                        <i class="bi bi-percent"></i>
+                                                        Recargo:
+                                                    </span>
+                                                    <span class="pago-value-admin">
+                                                        +{{ $porcentajeRecargo }}% (${{ number_format($montoRecargo, 2) }})
+                                                    </span>
+                                                </div>
+                                            @endif
                                             
                                             @if($ticket->tipoPago && strtolower($ticket->tipoPago->nombre) === 'efectivo')
                                                 @php

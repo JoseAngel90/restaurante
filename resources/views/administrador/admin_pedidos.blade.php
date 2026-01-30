@@ -67,6 +67,7 @@
                 'abreviatura_op' => $disp->comida->abreviatura_op,
                 'disponible' => $disp->comida->disponible,
                 'precio' => $disp->comida->precio ?? 0,
+                'tipo' => strtoupper($disp->comida->tipoComida->descripcion ?? ''),
             ]);
     @endphp
 
@@ -290,21 +291,12 @@
                                     <!-- Acciones -->
                                     <td class="text-center">
                                         <div class="btn-group-vertical gap-1" style="width: 120px;">
-                                            <!-- Botón Pagar -->
+                                            <!-- Botón Pagar/Agregar Combinado -->
                                             <button class="btn btn-success btn-sm" 
                                                     data-bs-toggle="modal" 
-                                                    data-bs-target="#pagarModal{{ $ticket->id }}">
-                                                <i class="bi bi-cash-stack me-1"></i>Pagar
+                                                    data-bs-target="#pagarAgregarModal{{ $ticket->id }}">
+                                                <i class="bi bi-cash-stack me-1"></i>Pagar/Agregar
                                             </button>
-
-                                            <!-- Botón Editar (solo si no es venta directa) -->
-                                            @if(!$esVentaDirecta)
-                                                <button class="btn btn-warning btn-sm" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#editarPedidoModal{{ $ticket->pedido->id }}">
-                                                    <i class="bi bi-pencil me-1"></i>Agregar
-                                                </button>
-                                            @endif
 
                                             <!-- Botón Cancelar -->
                                             <button class="btn btn-danger btn-sm" 
@@ -352,146 +344,301 @@
         $esDomicilio = $tipoPedido === 'domicilio' || $tipoPedido === 'a domicilio';
     @endphp
 
-    {{-- MODAL PAGAR --}}
-    <div class="modal fade" id="pagarModal{{ $ticket->id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+    {{-- MODAL PAGAR Y AGREGAR COMBINADO --}}
+    <div class="modal fade" id="pagarAgregarModal{{ $ticket->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title">
-                        <i class="bi bi-cash-stack me-2"></i>Pagar Ticket #{{ $ticket->id }}
+                        <i class="bi bi-cash-stack me-2"></i>Ticket #{{ $ticket->id }}
                         @if($esDomicilio)
                             <small class="badge bg-light text-success ms-2">A Domicilio</small>
                         @endif
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="{{ route('ticket.pagar', $ticket->id) }}" method="POST">
-                    @csrf
-                    <div class="modal-body">
-                        <div class="text-center mb-4 p-3 bg-light rounded">
-                            <h6 class="text-muted mb-1">Total a Pagar:</h6>
-                            <h2 class="text-success mb-0 fw-bold total-pagar" data-total="{{ $ticket->total }}">
-                                ${{ number_format($ticket->total, 2) }}
-                            </h2>
-                        </div>
-                        <div class="mt-2">
-    <small class="text-muted d-block">Ajustes:</small>
-    <span class="badge bg-primary me-1 d-none" id="badgeTarjeta{{ $ticket->id }}">+4% Tarjeta</span>
-    <span class="badge bg-warning text-dark d-none" id="badgeFactura{{ $ticket->id }}">+16% Factura</span>
-</div>
-
-<input type="hidden" name="total_final" id="totalFinal{{ $ticket->id }}" value="{{ $ticket->total }}">
-<input type="hidden" name="requiere_factura" id="requiereFactura{{ $ticket->id }}" value="0">
-
-                        <div class="mb-3">
-                            <label for="id_tipo_pago_{{ $ticket->id }}" class="form-label fw-bold">
-                                <i class="bi bi-credit-card me-1"></i>Método de Pago
-                            </label>
-                            <select name="id_tipo_pago" 
-                                    id="id_tipo_pago_{{ $ticket->id }}" 
-                                    class="form-select select-tipo-pago" 
-                                    data-ticket-id="{{ $ticket->id }}"
-                                    required>
-                                @foreach(App\Models\TipoPago::all() as $tipoPago)
-                                    <option value="{{ $tipoPago->id }}" 
-                                            data-metodo="{{ strtolower($tipoPago->nombre) }}"
-                                            {{ $ticket->id_tipo_pago == $tipoPago->id ? 'selected' : '' }}>
-                                        {{ $tipoPago->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <div class="form-check mt-2">
-    <input class="form-check-input check-factura" 
-           type="checkbox" 
-           id="facturaCheck{{ $ticket->id }}"
-           data-ticket-id="{{ $ticket->id }}">
-    <label class="form-check-label fw-bold" for="facturaCheck{{ $ticket->id }}">
-        🧾 Requiere factura (+16%)
-    </label>
-</div>
-
-                        </div>
-
-                        {{-- CAMPOS PARA EFECTIVO (con cálculo de cambio) --}}
-                        <div id="camposEfectivo{{ $ticket->id }}" class="campos-efectivo" style="display: none;">
-                            <div class="mb-3">
-                                <label for="monto_recibido_{{ $ticket->id }}" class="form-label fw-bold">
-                                    <i class="bi bi-cash me-1"></i>Monto Recibido
-                                </label>
-                                <input type="number" 
-                                       id="monto_recibido_{{ $ticket->id }}" 
-                                       class="form-control form-control-lg text-center input-monto-recibido" 
-                                       placeholder="$0.00"
-                                       step="0.01"
-                                       min="0"
-                                       data-ticket-id="{{ $ticket->id }}"
-                                       data-total="{{ $ticket->total }}">
-                            <small class="text-muted">Ingresa el dinero que te dio el cliente</small>
-                        </div>
-
-                        <div class="alert alert-info mb-3" id="alertaCambio{{ $ticket->id }}" style="display: none;">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold">
-                                    <i class="bi bi-arrow-return-left me-1"></i>Cambio a devolver:
-                                </span>
-                                <span class="fs-4 fw-bold cambio-calculado" id="cambioCalculado{{ $ticket->id }}">
-                                    $0.00
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-danger mb-3" id="alertaInsuficiente{{ $ticket->id }}" style="display: none;">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            <strong>Monto insuficiente.</strong> Faltan: 
-                            <span class="fw-bold faltante-calculado" id="faltanteCalculado{{ $ticket->id }}">$0.00</span>
-                        </div>
-
-                        <input type="hidden" name="cambio" id="cambioHidden{{ $ticket->id }}" value="0">
-                        <input type="hidden" name="monto_recibido" id="montoRecibidoHidden{{ $ticket->id }}" value="0">
-                    </div>
-
-                    @if($esVentaDirecta)
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            <strong>Venta Directa:</strong> Los productos ya fueron entregados al cliente.
-                        </div>
-                    @elseif($esDomicilio)
-                        <div class="alert alert-success">
-                            <i class="bi bi-house-door me-2"></i>
-                            <strong>Pedido a Domicilio:</strong> El pedido será entregado en el domicilio del cliente.
-                        </div>
+                
+                <!-- Pestañas -->
+                <ul class="nav nav-tabs px-3 pt-2" id="tabs{{ $ticket->id }}" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" 
+                                id="pagar-tab-{{ $ticket->id }}" 
+                                data-bs-toggle="tab" 
+                                data-bs-target="#pagar-{{ $ticket->id }}" 
+                                type="button">
+                            <i class="bi bi-cash-stack me-1"></i>Pagar
+                        </button>
+                    </li>
+                    @if(!$esVentaDirecta)
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" 
+                                id="agregar-tab-{{ $ticket->id }}" 
+                                data-bs-toggle="tab" 
+                                data-bs-target="#agregar-{{ $ticket->id }}" 
+                                type="button">
+                            <i class="bi bi-pencil me-1"></i>Agregar
+                        </button>
+                    </li>
                     @endif
-                    
-                    <div class="alert alert-secondary mb-0">
-                        <small>
-                            <i class="bi bi-person-badge me-1"></i>
-                            <strong>
+                </ul>
+                
+                <div class="tab-content">
+                    <!-- TAB PAGAR -->
+                    <div class="tab-pane fade show active" id="pagar-{{ $ticket->id }}">
+                        <form action="{{ route('ticket.pagar', $ticket->id) }}" method="POST">
+                            @csrf
+                            <div class="modal-body">
+                                <div class="text-center mb-4 p-3 bg-light rounded">
+                                    <h6 class="text-muted mb-1">Total a Pagar:</h6>
+                                    <h2 class="text-success mb-0 fw-bold total-pagar" data-total="{{ $ticket->total }}">
+                                        ${{ number_format($ticket->total, 2) }}
+                                    </h2>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted d-block">Ajustes:</small>
+                                    <span class="badge bg-primary me-1 d-none" id="badgeTarjeta{{ $ticket->id }}">+4% Tarjeta</span>
+                                    <span class="badge bg-warning text-dark d-none" id="badgeFactura{{ $ticket->id }}">+16% Factura</span>
+                                </div>
+
+                                <input type="hidden" name="total_final" id="totalFinal{{ $ticket->id }}" value="{{ $ticket->total }}">
+                                <input type="hidden" name="requiere_factura" id="requiereFactura{{ $ticket->id }}" value="0">
+
+                                <div class="mb-3">
+                                    <label for="id_tipo_pago_{{ $ticket->id }}" class="form-label fw-bold">
+                                        <i class="bi bi-credit-card me-1"></i>Método de Pago
+                                    </label>
+                                    <select name="id_tipo_pago" 
+                                            id="id_tipo_pago_{{ $ticket->id }}" 
+                                            class="form-select select-tipo-pago" 
+                                            data-ticket-id="{{ $ticket->id }}"
+                                            required>
+                                        @foreach(App\Models\TipoPago::all() as $tipoPago)
+                                            <option value="{{ $tipoPago->id }}" 
+                                                    data-metodo="{{ strtolower($tipoPago->nombre) }}"
+                                                    {{ $ticket->id_tipo_pago == $tipoPago->id ? 'selected' : '' }}>
+                                                {{ $tipoPago->nombre }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input check-factura" 
+                                               type="checkbox" 
+                                               id="facturaCheck{{ $ticket->id }}"
+                                               data-ticket-id="{{ $ticket->id }}">
+                                        <label class="form-check-label fw-bold" for="facturaCheck{{ $ticket->id }}">
+                                            🧾 Requiere factura (+16%)
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {{-- CAMPOS PARA EFECTIVO (con cálculo de cambio) --}}
+                                <div id="camposEfectivo{{ $ticket->id }}" class="campos-efectivo" style="display: none;">
+                                    <div class="mb-3">
+                                        <label for="monto_recibido_{{ $ticket->id }}" class="form-label fw-bold">
+                                            <i class="bi bi-cash me-1"></i>Monto Recibido
+                                        </label>
+                                        <input type="number" 
+                                               id="monto_recibido_{{ $ticket->id }}" 
+                                               class="form-control form-control-lg text-center input-monto-recibido" 
+                                               placeholder="$0.00"
+                                               step="0.01"
+                                               min="0"
+                                               data-ticket-id="{{ $ticket->id }}"
+                                               data-total="{{ $ticket->total }}">
+                                        <small class="text-muted">Ingresa el dinero que te dio el cliente</small>
+                                    </div>
+
+                                    <div class="alert alert-info mb-3" id="alertaCambio{{ $ticket->id }}" style="display: none;">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="fw-bold">
+                                                <i class="bi bi-arrow-return-left me-1"></i>Cambio a devolver:
+                                            </span>
+                                            <span class="fs-4 fw-bold cambio-calculado" id="cambioCalculado{{ $ticket->id }}">
+                                                $0.00
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-danger mb-3" id="alertaInsuficiente{{ $ticket->id }}" style="display: none;">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                        <strong>Monto insuficiente.</strong> Faltan: 
+                                        <span class="fw-bold faltante-calculado" id="faltanteCalculado{{ $ticket->id }}">$0.00</span>
+                                    </div>
+
+                                    <input type="hidden" name="cambio" id="cambioHidden{{ $ticket->id }}" value="0">
+                                    <input type="hidden" name="monto_recibido" id="montoRecibidoHidden{{ $ticket->id }}" value="0">
+                                </div>
+
                                 @if($esVentaDirecta)
-                                    Registrado
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <strong>Venta Directa:</strong> Los productos ya fueron entregados al cliente.
+                                    </div>
                                 @elseif($esDomicilio)
-                                    Domicilio
-                                @else
-                                    Atendido
+                                    <div class="alert alert-success">
+                                        <i class="bi bi-house-door me-2"></i>
+                                        <strong>Pedido a Domicilio:</strong> El pedido será entregado en el domicilio del cliente.
+                                    </div>
                                 @endif
-                                por:
-                            </strong> 
-                            {{ $ticket->pedido->usuario->nombre ?? 'N/A' }}
-                        </small>
+                                
+                                <div class="alert alert-secondary mb-0">
+                                    <small>
+                                        <i class="bi bi-person-badge me-1"></i>
+                                        <strong>
+                                            @if($esVentaDirecta)
+                                                Registrado
+                                            @elseif($esDomicilio)
+                                                Domicilio
+                                            @else
+                                                Atendido
+                                            @endif
+                                            por:
+                                        </strong> 
+                                        {{ $ticket->pedido->usuario->nombre ?? 'N/A' }}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" 
+                                        class="btn btn-success px-4 btn-confirmar-pago" 
+                                        id="btnConfirmarPago{{ $ticket->id }}"
+                                        data-ticket-id="{{ $ticket->id }}">
+                                    <i class="bi bi-check-circle me-2"></i>Confirmar Pago
+                                </button>
+                            </div>
+                        </form>
                     </div>
+                    
+                    <!-- TAB AGREGAR -->
+                    @if(!$esVentaDirecta)
+                    <div class="tab-pane fade" id="agregar-{{ $ticket->id }}">
+                        <form action="{{ route('pedido.update', $ticket->pedido->id) }}" method="POST">
+                            @csrf
+                            @method('PUT')
+                            <div class="modal-body">
+                                {{-- DATOS DEL CLIENTE --}}
+                                <h6 class="fw-bold">Datos del Cliente</h6>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nombre</label>
+                                        <input type="text" name="cliente_nombre" class="form-control" value="{{ $ticket->pedido->cliente->nombre ?? '' }}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Teléfono</label>
+                                        <input type="text" name="cliente_telefono" class="form-control" value="{{ $ticket->pedido->cliente->telefono ?? '' }}" required>
+                                    </div>
+                                </div>
+
+                                {{-- PRODUCTOS EXISTENTES --}}
+                                <h6 class="fw-bold">Productos del Pedido</h6>
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-sm table-bordered text-center align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Comida</th>
+                                                <th>Disponible</th>
+                                                <th>Cantidad</th>
+                                                <th>Precio Unit.</th>
+                                                <th>Subtotal</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="detalle-pedido-body-{{ $ticket->pedido->id }}">
+                                            @foreach($ticket->pedido->detalles as $item)
+                                                @php
+                                                    $comida = $item->comida;
+                                                    $disponible = $comida ? $comida->disponible + $item->cantidad : 0;
+                                                @endphp
+                                                <tr data-id="{{ $item->id }}">
+                                                    <td class="text-start ps-2">{{ $comida->nombre ?? 'N/A' }}</td>
+                                                    <td>{{ $comida->disponible ?? 0 }}</td>
+                                                    <td>
+                                                        <input type="number" 
+                                                               name="detalle[{{ $item->id }}][cantidad]" 
+                                                               class="form-control cantidad-input" 
+                                                               value="{{ $item->cantidad }}" 
+                                                               min="0" 
+                                                               max="{{ $disponible }}"
+                                                               data-precio="{{ $item->precio_unitario }}"
+                                                               data-tipo="{{ strtoupper($comida->tipoComida->descripcion ?? '') }}">
+                                                        <input type="hidden" name="detalle[{{ $item->id }}][id_comida]" value="{{ $comida->id ?? 0 }}">
+                                                        <input type="hidden" name="detalle[{{ $item->id }}][precio]" value="{{ $item->precio_unitario }}">
+                                                    </td>
+                                                    <td>${{ number_format($item->precio_unitario, 2) }}</td>
+                                                    <td class="subtotal">${{ number_format($item->subtotal, 2) }}</td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-sm btn-danger btn-remove-comida" data-detalle-id="{{ $item->id }}">
+                                                            <i class="bi bi-x-lg"></i>
+                                                        </button>
+                                                        <input type="hidden" name="detalle_eliminado[]" value="" class="detalle-eliminado">
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {{-- AGREGAR NUEVA COMIDA --}}
+                                <h6 class="fw-bold">Agregar Nueva Comida</h6>
+                                <div class="row g-2 align-items-end mb-3 position-relative">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Buscar Comida</label>
+                                        <input type="text" 
+                                               id="buscarComida{{ $ticket->pedido->id }}" 
+                                               class="form-control buscar-comida-input" 
+                                               placeholder="Escribe abreviatura o nombre"
+                                               autocomplete="off"
+                                               data-pedido-id="{{ $ticket->pedido->id }}">
+                                        <div id="resultadosComida{{ $ticket->pedido->id }}" 
+                                             class="list-group position-absolute w-100" 
+                                             style="z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label">Cantidad</label>
+                                        <input type="number" 
+                                               id="nuevaCantidad{{ $ticket->pedido->id }}" 
+                                               class="form-control" 
+                                               min="1" 
+                                               value="1">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <button type="button" 
+                                                class="btn btn-success w-100 btn-agregar-comida" 
+                                                data-pedido-id="{{ $ticket->pedido->id }}">
+                                            <i class="bi bi-plus-circle"></i> Agregar
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {{-- TOTAL DEL PEDIDO --}}
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+                                        <strong>Total del Pedido:</strong>
+                                        <strong class="fs-5 text-success" id="totalPedido{{ $ticket->pedido->id }}">${{ number_format($ticket->total, 2) }}</strong>
+                                    </div>
+                                </div>
+
+                                {{-- NOTAS --}}
+                                <div class="mb-3">
+                                    <label class="form-label">Notas</label>
+                                    <textarea name="notas" class="form-control" rows="2">{{ $ticket->pedido->notas }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn {{ $esDomicilio ? 'btn-success' : 'btn-warning' }} px-4">
+                                    <i class="bi bi-save me-2"></i>Guardar Cambios
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    @endif
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" 
-                            class="btn btn-success px-4 btn-confirmar-pago" 
-                            id="btnConfirmarPago{{ $ticket->id }}"
-                            data-ticket-id="{{ $ticket->id }}">
-                        <i class="bi bi-check-circle me-2"></i>Confirmar Pago
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
-</div>
 
     {{-- MODAL CANCELAR --}}
     <div class="modal fade" id="cancelarModal{{ $ticket->id }}" tabindex="-1" aria-hidden="true">
@@ -554,151 +701,6 @@
         </div>
     </div>
 
-    {{-- MODAL EDITAR PEDIDO (solo para pedidos normales y domicilio) --}}
-    @if(!$esVentaDirecta)
-        <div class="modal fade" id="editarPedidoModal{{ $ticket->pedido->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-                <div class="modal-content">
-                    <form action="{{ route('pedido.update', $ticket->pedido->id) }}" method="POST">
-                        @csrf
-                        @method('PUT')
-                        
-                        <div class="modal-header {{ $esDomicilio ? 'bg-success text-white' : 'bg-warning text-dark' }}">
-                            <h5 class="modal-title">
-                                Editar Pedido #{{ $ticket->pedido->id }}
-                                @if($esDomicilio)
-                                    <span class="badge bg-light text-success ms-2">
-                                        <i class="bi bi-house-door me-1"></i>A Domicilio
-                                    </span>
-                                @endif
-                                <small class="ms-2 opacity-75">
-                                    <i class="bi bi-person-badge"></i>
-                                    {{ $esDomicilio ? 'Domicilio' : 'Atendido' }} por: {{ $ticket->pedido->usuario->nombre ?? 'N/A' }}
-                                </small>
-                            </h5>
-                            <button type="button" class="btn-close {{ $esDomicilio ? 'btn-close-white' : '' }}" data-bs-dismiss="modal"></button>
-                        </div>
-                        
-                        <div class="modal-body">
-                            {{-- DATOS DEL CLIENTE --}}
-                            <h6 class="fw-bold">Datos del Cliente</h6>
-                            <div class="row g-2 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Nombre</label>
-                                    <input type="text" name="cliente_nombre" class="form-control" value="{{ $ticket->pedido->cliente->nombre ?? '' }}" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Teléfono</label>
-                                    <input type="text" name="cliente_telefono" class="form-control" value="{{ $ticket->pedido->cliente->telefono ?? '' }}" required>
-                                </div>
-                            </div>
-
-                            {{-- PRODUCTOS EXISTENTES --}}
-                            <h6 class="fw-bold">Productos del Pedido</h6>
-                            <div class="table-responsive mb-3">
-                                <table class="table table-sm table-bordered text-center align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Comida</th>
-                                            <th>Disponible</th>
-                                            <th>Cantidad</th>
-                                            <th>Precio Unit.</th>
-                                            <th>Subtotal</th>
-                                            <th>Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="detalle-pedido-body-{{ $ticket->pedido->id }}">
-                                        @foreach($ticket->pedido->detalles as $item)
-                                            @php
-                                                $comida = $item->comida;
-                                                $disponible = $comida ? $comida->disponible + $item->cantidad : 0;
-                                            @endphp
-                                            <tr data-id="{{ $item->id }}">
-                                                <td class="text-start ps-2">{{ $comida->nombre ?? 'N/A' }}</td>
-                                                <td>{{ $comida->disponible ?? 0 }}</td>
-                                                <td>
-                                                    <input type="number" 
-                                                           name="detalle[{{ $item->id }}][cantidad]" 
-                                                           class="form-control cantidad-input" 
-                                                           value="{{ $item->cantidad }}" 
-                                                           min="0" 
-                                                           max="{{ $disponible }}"
-                                                           data-precio="{{ $item->precio_unitario }}">
-                                                    <input type="hidden" name="detalle[{{ $item->id }}][id_comida]" value="{{ $comida->id ?? 0 }}">
-                                                    <input type="hidden" name="detalle[{{ $item->id }}][precio]" value="{{ $item->precio_unitario }}">
-                                                </td>
-                                                <td>${{ number_format($item->precio_unitario, 2) }}</td>
-                                                <td class="subtotal">${{ number_format($item->subtotal, 2) }}</td>
-                                                <td>
-                                                    <button type="button" class="btn btn-sm btn-danger btn-remove-comida" data-detalle-id="{{ $item->id }}">
-                                                        <i class="bi bi-x-lg"></i>
-                                                    </button>
-                                                    <input type="hidden" name="detalle_eliminado[]" value="" class="detalle-eliminado">
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {{-- AGREGAR NUEVA COMIDA --}}
-                            <h6 class="fw-bold">Agregar Nueva Comida</h6>
-                            <div class="row g-2 align-items-end mb-3 position-relative">
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label">Buscar Comida</label>
-                                    <input type="text" 
-                                           id="buscarComida{{ $ticket->pedido->id }}" 
-                                           class="form-control buscar-comida-input" 
-                                           placeholder="Escribe abreviatura o nombre"
-                                           autocomplete="off"
-                                           data-pedido-id="{{ $ticket->pedido->id }}">
-                                    <div id="resultadosComida{{ $ticket->pedido->id }}" 
-                                         class="list-group position-absolute w-100" 
-                                         style="z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <label class="form-label">Cantidad</label>
-                                    <input type="number" 
-                                           id="nuevaCantidad{{ $ticket->pedido->id }}" 
-                                           class="form-control" 
-                                           min="1" 
-                                           value="1">
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <button type="button" 
-                                            class="btn btn-success w-100 btn-agregar-comida" 
-                                            data-pedido-id="{{ $ticket->pedido->id }}">
-                                        <i class="bi bi-plus-circle"></i> Agregar
-                                    </button>
-                                </div>
-                            </div>
-
-                            {{-- TOTAL DEL PEDIDO --}}
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-                                    <strong>Total del Pedido:</strong>
-                                    <strong class="fs-5 text-success" id="totalPedido{{ $ticket->pedido->id }}">${{ number_format($ticket->total, 2) }}</strong>
-                                </div>
-                            </div>
-
-                            {{-- NOTAS --}}
-                            <div class="mb-3">
-                                <label class="form-label">Notas</label>
-                                <textarea name="notas" class="form-control" rows="2">{{ $ticket->pedido->notas }}</textarea>
-                            </div>
-                        </div>
-
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn {{ $esDomicilio ? 'btn-success' : 'btn-warning' }} px-4">
-                                <i class="bi bi-save me-2"></i>Guardar Cambios
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    @endif
 @endforeach
 
 {{-- ================= MODALES DE CONFIRMACIÓN ================= --}}
@@ -975,6 +977,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 item.dataset.abreviatura = c.abreviatura_op;
                 item.dataset.disponible = c.disponible;
                 item.dataset.precio = c.precio;
+                item.dataset.tipo = c.tipo || '';
 
                 item.addEventListener('click', () => {
                     input.value = c.abreviatura_op;
@@ -982,6 +985,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.dataset.selectedPrecio = c.precio;
                     input.dataset.selectedDisponible = c.disponible;
                     input.dataset.selectedNombre = c.nombre;
+                    input.dataset.selectedTipo = c.tipo || '';
                     resultados.innerHTML = '';
                 });
 
@@ -1008,19 +1012,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Actualizar subtotales cuando cambie la cantidad
     document.querySelectorAll('.cantidad-input').forEach(input => {
         input.addEventListener('input', function() {
-            const precio = parseFloat(this.dataset.precio);
-            const cantidad = parseInt(this.value) || 0;
-            const subtotal = precio * cantidad;
-            
-            const row = this.closest('tr');
-            const subtotalCell = row.querySelector('.subtotal');
-            if (subtotalCell) {
-                subtotalCell.textContent = `$${subtotal.toFixed(2)}`;
-            }
-            
             const tbody = this.closest('tbody');
             const pedidoId = tbody.id.replace('detalle-pedido-body-', '');
-            actualizarTotalPedido(pedidoId);
+            actualizarSubtotalFila(this);
+            actualizarTotalSimple(pedidoId);
         });
     });
 
@@ -1039,7 +1034,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const tbody = this.closest('tbody');
             const pedidoId = tbody.id.replace('detalle-pedido-body-', '');
-            actualizarTotalPedido(pedidoId);
+            actualizarTotalSimple(pedidoId);
         });
     });
 });
@@ -1052,6 +1047,7 @@ function agregarComidaPorBusqueda(pedidoId) {
     const selectedPrecio = parseFloat(input.dataset.selectedPrecio || 0);
     const selectedDisponible = parseInt(input.dataset.selectedDisponible || 0);
     const selectedNombre = input.dataset.selectedNombre;
+    const selectedTipo = input.dataset.selectedTipo || '';
     const cantidad = parseInt(cantidadInput.value, 10);
 
     if (!selectedId) {
@@ -1085,7 +1081,8 @@ function agregarComidaPorBusqueda(pedidoId) {
                    value="${cantidad}" 
                    min="0" 
                    max="${selectedDisponible}"
-                   data-precio="${selectedPrecio}">
+                     data-precio="${selectedPrecio}"
+                     data-tipo="${selectedTipo}">
             <input type="hidden" name="detalle[${newId}][id_comida]" value="${selectedId}">
             <input type="hidden" name="detalle[${newId}][precio]" value="${selectedPrecio}">
         </td>
@@ -1102,19 +1099,13 @@ function agregarComidaPorBusqueda(pedidoId) {
 
     const nuevaCantidadInput = tr.querySelector('.cantidad-input');
     nuevaCantidadInput.addEventListener('input', function() {
-        const precio = parseFloat(this.dataset.precio);
-        const cantidad = parseInt(this.value) || 0;
-        const subtotal = precio * cantidad;
-        
-        const subtotalCell = tr.querySelector('.subtotal');
-        subtotalCell.textContent = `$${subtotal.toFixed(2)}`;
-        
-        actualizarTotalPedido(pedidoId);
+        actualizarSubtotalFila(this);
+        actualizarTotalSimple(pedidoId);
     });
 
     tr.querySelector('.btn-remove-new').addEventListener('click', function() {
         tr.remove();
-        actualizarTotalPedido(pedidoId);
+        actualizarTotalSimple(pedidoId);
     });
 
     input.value = '';
@@ -1124,19 +1115,27 @@ function agregarComidaPorBusqueda(pedidoId) {
     delete input.dataset.selectedDisponible;
     delete input.dataset.selectedNombre;
     
-    actualizarTotalPedido(pedidoId);
+    actualizarTotalSimple(pedidoId);
 }
 
-function actualizarTotalPedido(pedidoId) {
+function actualizarSubtotalFila(input) {
+    const row = input.closest('tr');
+    const precio = parseFloat(input.dataset.precio || 0);
+    const cantidad = parseInt(input.value || 0);
+    const subtotal = precio * cantidad;
+    const subtotalCell = row.querySelector('.subtotal');
+    if (subtotalCell) {
+        subtotalCell.textContent = `$${subtotal.toFixed(2)}`;
+    }
+}
+
+function actualizarTotalSimple(pedidoId) {
     let total = 0;
-    
-    document.querySelectorAll(`#detalle-pedido-body-${pedidoId} tr:not([style*="display: none"])`).forEach(row => {
-        const cantidadInput = row.querySelector('.cantidad-input');
-        const precio = parseFloat(cantidadInput?.dataset.precio || 0);
-        const cantidad = parseInt(cantidadInput?.value || 0);
-        total += precio * cantidad;
+    document.querySelectorAll(`#detalle-pedido-body-${pedidoId} tr:not([style*="display: none"]) .subtotal`).forEach(cell => {
+        const valor = parseFloat((cell.textContent || '').replace('$', '')) || 0;
+        total += valor;
     });
-    
+
     const totalElement = document.getElementById(`totalPedido${pedidoId}`);
     if (totalElement) {
         totalElement.textContent = `$${total.toFixed(2)}`;
@@ -1276,10 +1275,10 @@ function ocultarAlertas(ticketId) {
     }
 }
 
-// Limpiar campos al cerrar el modal
-document.querySelectorAll('[id^="pagarModal"]').forEach(modal => {
+// Limpiar campos al cerrar el modal combinado
+document.querySelectorAll('[id^="pagarAgregarModal"]').forEach(modal => {
     modal.addEventListener('hidden.bs.modal', function() {
-        const ticketId = this.id.replace('pagarModal', '');
+        const ticketId = this.id.replace('pagarAgregarModal', '');
         const montoInput = document.getElementById(`monto_recibido_${ticketId}`);
         if (montoInput) {
             montoInput.value = '';
@@ -1754,7 +1753,7 @@ document.querySelectorAll('.select-tipo-pago').forEach(select => {
 });
 
 function recalcularTotal(ticketId) {
-    const modal = document.getElementById(`pagarModal${ticketId}`);
+    const modal = document.getElementById(`pagarAgregarModal${ticketId}`);
     const totalSpan = modal.querySelector('.total-pagar');
     const totalBase = parseFloat(totalSpan.dataset.total);
 
